@@ -47,6 +47,15 @@ func _ready() -> void:
 	flash_light.omni_range = 6.0
 	flash_light.light_color = Color(1, 0.85, 0.6)
 	add_child(flash_light)
+	# small key light riding with the camera so the viewmodel's bevels and metal read in dark rooms
+	var key := OmniLight3D.new()
+	key.position = Vector3(0.35, 0.3, 0.05)
+	key.omni_range = 1.1
+	key.omni_attenuation = 1.5
+	key.light_energy = 0.45
+	key.light_specular = 1.2
+	key.light_color = Color(0.85, 0.9, 1.0)
+	add_child(key)
 	var lo: Array = Game.loadout if not Game.loadout.is_empty() else WeaponData.DEFAULT_LOADOUT
 	current = lo[0]
 	equip(lo[0], true)
@@ -58,8 +67,8 @@ func _build_model(id: StringName) -> Node3D:
 	var root := Node3D.new()
 	root.position = VM_POS
 	root.scale = Vector3.ONE * 0.72
-	var body_col := Color(0.30, 0.31, 0.35)
-	var metal := Color(0.45, 0.46, 0.5)
+	var body_col := Color(0.17, 0.18, 0.21)
+	var metal := Color(0.32, 0.33, 0.36)
 	match id:
 		&"rivet":
 			_part(root, Meshes.box(Vector3(0.07, 0.09, 0.3), body_col), Vector3(0, 0, 0))

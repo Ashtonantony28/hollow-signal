@@ -9,8 +9,8 @@ static func mat(color: Color, emission: float = 0.0, unshaded: bool = false, alp
 		return _mat_cache[key]
 	var m := StandardMaterial3D.new()
 	m.albedo_color = Color(color.r, color.g, color.b, alpha)
-	m.roughness = 0.85
-	m.metallic = 0.1
+	m.roughness = 0.55
+	m.metallic = 0.3
 	if emission > 0.0:
 		m.emission_enabled = true
 		m.emission = color
@@ -34,11 +34,63 @@ static func vertex_color_mat() -> StandardMaterial3D:
 
 static func box(size: Vector3, color: Color, emission: float = 0.0) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
+	mi.mesh = bevel_box(size)
 	mi.material_override = mat(color, emission)
 	return mi
+
+static var _bevel_cache := {}
+
+## Chamfered box (6 faces, 12 edge bevels, 8 corner tris) with flat normals, so edges catch
+## highlights instead of reading as flat grey blocks. Cached per size.
+static func bevel_box(size: Vector3, bevel: float = -1.0) -> ArrayMesh:
+	if bevel < 0.0:
+		bevel = minf(minf(size.x, size.y), size.z) * 0.14
+	var key := "%s|%.4f" % [size, bevel]
+	if _bevel_cache.has(key):
+		return _bevel_cache[key]
+	var h := size * 0.5
+	var b := minf(bevel, minf(minf(h.x, h.y), h.z) * 0.9)
+	var inner := h - Vector3(b, b, b)
+	# pt(signs, axis): corner point pushed fully out along `axis`
+	var pt := func(sx: float, sy: float, sz: float, axis: int) -> Vector3:
+		var v := Vector3(sx * inner.x, sy * inner.y, sz * inner.z)
+		if axis == 0: v.x = sx * h.x
+		elif axis == 1: v.y = sy * h.y
+		else: v.z = sz * h.z
+		return v
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var w := Color.WHITE
+	var q := func(a: Vector3, bb: Vector3, c: Vector3, d: Vector3) -> void:
+		var f := (a + bb + c + d) * 0.25
+		tri_facing(st, a, bb, c, w, f)
+		tri_facing(st, a, c, d, w, f)
+	var S := [-1.0, 1.0]
+	# main faces
+	for s in S:
+		q.call(pt.call(s, -1, -1, 0), pt.call(s, 1, -1, 0), pt.call(s, 1, 1, 0), pt.call(s, -1, 1, 0))
+		q.call(pt.call(-1, s, -1, 1), pt.call(1, s, -1, 1), pt.call(1, s, 1, 1), pt.call(-1, s, 1, 1))
+		q.call(pt.call(-1, -1, s, 2), pt.call(1, -1, s, 2), pt.call(1, 1, s, 2), pt.call(-1, 1, s, 2))
+	# edge bevels
+	for s1 in S:
+		for s2 in S:
+			# X-Y edges (run along z)
+			q.call(pt.call(s1, s2, -1, 0), pt.call(s1, s2, 1, 0), pt.call(s1, s2, 1, 1), pt.call(s1, s2, -1, 1))
+			# X-Z edges (run along y)
+			q.call(pt.call(s1, -1, s2, 0), pt.call(s1, 1, s2, 0), pt.call(s1, 1, s2, 2), pt.call(s1, -1, s2, 2))
+			# Y-Z edges (run along x)
+			q.call(pt.call(-1, s1, s2, 1), pt.call(1, s1, s2, 1), pt.call(1, s1, s2, 2), pt.call(-1, s1, s2, 2))
+	# corners
+	for sx in S:
+		for sy in S:
+			for sz in S:
+				var a: Vector3 = pt.call(sx, sy, sz, 0)
+				var c2: Vector3 = pt.call(sx, sy, sz, 1)
+				var d: Vector3 = pt.call(sx, sy, sz, 2)
+				tri_facing(st, a, c2, d, w, (a + c2 + d) / 3.0)
+	var m := st.commit()
+	_bevel_cache[key] = m
+	return m
 
 static func cyl(radius: float, height: float, color: Color, emission: float = 0.0, sides: int = 8) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
