@@ -8,6 +8,7 @@ extends Node
 ##   --quit-after=S  quit after S seconds (prints a run report)
 ##   --screenshot=DIR  save a PNG every --shot-every=S seconds (needs a display, e.g. xvfb)
 ##   --timescale=X   Engine.time_scale
+##   --tour=DIR      visual QA: photograph every room of decks 1-5 with a few enemies, then quit
 
 var level: Level
 var hud: HUD
@@ -40,6 +41,9 @@ func _ready() -> void:
 	Events.player_died.connect(_on_player_died)
 	Events.run_finished.connect(_on_run_finished)
 	Synth.start_music()
+	if args.has("tour"):
+		_tour.call_deferred()
+		return
 	if args.has("skip-menu") or args.has("autoplay"):
 		start_run(int(args.get("seed", "-1")), int(args.get("deck", "0")))
 	else:
@@ -202,4 +206,53 @@ func _report_and_quit() -> void:
 	print("[report] state=%s deck=%d phase=%s time=%.1f kills=%d shots=%d hits=%d integrity=%.0f dealt=%.0f taken=%.0f" % [
 		state, Game.deck_index, phase_name, Game.stats.time, Game.stats.kills, Game.stats.shots, Game.stats.hits,
 		Game.integrity, Game.stats.damage_dealt, Game.stats.damage_taken])
+	get_tree().quit(0)
+
+## Visual QA tour: for each deck, stand in a corner of each interesting room facing its centre,
+## spawn one of each unlocked enemy in view, and save a screenshot. Needs a display (xvfb).
+func _tour() -> void:
+	var dir: String = args.tour
+	DirAccess.make_dir_recursive_absolute(dir)
+	var seed_value := int(args.get("seed", "11"))
+	for deck in Game.DECK_COUNT:
+		Game.new_run(seed_value)
+		Game.deck_index = deck
+		Game.set_meta("god", true)
+		_free_level()
+		level = Level.new(deck, Game.deck_seed())
+		add_child(level)
+		if hud == null:
+			hud = HUD.new()
+			add_child(hud)
+		hud.level = level
+		hud.visible = true
+		level.director.enabled = false
+		var shots := 0
+		for room in level.layout.rooms:
+			if not (room.type in [&"arena", &"uplink", &"vault", &"hub", &"boss"]) or shots >= 3:
+				continue
+			shots += 1
+			var r: Rect2i = room.rect
+			var corner := DeckGen.cell_to_world(r.position + Vector2i(1, 1))
+			var c := DeckGen.cell_to_world(room.center)
+			level.player.global_position = corner + Vector3.UP * 0.1
+			level.player.velocity = Vector3.ZERO
+			for _i in 3:
+				await get_tree().physics_frame
+			level.player.look_at_point(c + Vector3.UP * 1.4, 10.0)
+			var k := 0
+			for kind in EnemyData.UNLOCK:
+				if EnemyData.UNLOCK[kind] <= deck:
+					var e := level.director.spawn_now(kind, c + Vector3((k - 2) * 2.2, 0.2, 0).rotated(Vector3.UP, level.player.rotation.y), k % 3)
+					e.set_physics_process(false)
+					e.global_position.y = 3.2 if kind == &"shrieker" else 0.05
+					e.look_at(Vector3(level.player.global_position.x, e.global_position.y, level.player.global_position.z), Vector3.UP)
+					k += 1
+			for _i in 20:
+				await get_tree().process_frame
+			var img := get_viewport().get_texture().get_image()
+			img.save_png("%s/deck%d_%s_%d.png" % [dir, deck + 1, room.type, shots])
+			for e in get_tree().get_nodes_in_group("enemies"):
+				e.queue_free()
+			await get_tree().process_frame
 	get_tree().quit(0)

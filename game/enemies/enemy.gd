@@ -68,8 +68,14 @@ func _ready() -> void:
 		weak_mesh.position = def.weak_offset
 		visual.add_child(weak_mesh)
 	if max_shield > 0.0:
-		shield_mesh = Meshes.sphere(maxf(def.height, def.radius * 2.0) * 0.62, ThemeData.BAND_COLORS[band], 1.5, 0.28)
-		shield_mesh.material_override = Meshes.mat(ThemeData.BAND_COLORS[band], 1.2, true, 0.22)
+		shield_mesh = Meshes.sphere(maxf(def.height, def.radius * 2.0) * 0.6, ThemeData.BAND_COLORS[band])
+		var sm := SphereMesh.new()
+		sm.radius = maxf(def.height, def.radius * 2.0) * 0.6
+		sm.height = sm.radius * 2.0
+		sm.radial_segments = 20
+		sm.rings = 12
+		shield_mesh.mesh = sm
+		shield_mesh.material_override = Meshes.shield_material(band)
 		shield_mesh.position.y = def.height * 0.5
 		shield_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		visual.add_child(shield_mesh)
@@ -249,7 +255,7 @@ func _update_shield_visual() -> void:
 	if shield_mesh:
 		shield_mesh.visible = shield > 0.0
 		if max_shield > 0.0:
-			shield_mesh.transparency = 1.0 - (0.35 + 0.65 * shield / max_shield)
+			(shield_mesh.material_override as ShaderMaterial).set_shader_parameter("strength", 0.35 + 0.65 * shield / max_shield)
 
 func heal_shield(amount: float) -> void:
 	if max_shield <= 0.0 or state == State.DEAD:

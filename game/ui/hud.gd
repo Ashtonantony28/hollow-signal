@@ -26,6 +26,9 @@ var message_timer := 0.0
 var hit_timer := 0.0
 var debug := false
 var cross_parts: Array[ColorRect] = []
+var dmg_root: Control
+var dmg_arrows: Array = []   # {node, dir (world), t}
+const DMG_RADIUS := 120.0
 
 ## Edge-only damage vignette: alpha rises toward the screen border, centre stays clear.
 const VIGNETTE_SHADER := """
@@ -127,6 +130,16 @@ func _ready() -> void:
 	prompt_label.position = Vector2(-300, 60)
 	prompt_label.custom_minimum_size = Vector2(600, 30)
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dmg_root = Control.new()
+	dmg_root.set_anchors_preset(Control.PRESET_CENTER)
+	dmg_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(dmg_root)
+	for i in 4:
+		var arrow := Polygon2D.new()
+		arrow.polygon = PackedVector2Array([Vector2(-34, 0), Vector2(34, 0), Vector2(0, -16)])
+		arrow.color = Color(1.0, 0.2, 0.15, 0.0)
+		dmg_root.add_child(arrow)
+		dmg_arrows.append({"node": arrow, "dir": Vector3.ZERO, "t": 0.0})
 	debug_label = _label(root, "", 13, Color(0.7, 1.0, 0.7))
 	debug_label.position = Vector2(10, 10)
 	debug_label.visible = false
@@ -139,7 +152,7 @@ func _ready() -> void:
 	Events.message.connect(_on_message)
 	Events.enemy_hit.connect(_on_hit)
 	Events.enemy_killed.connect(_on_kill)
-	Events.player_damaged.connect(func(_a, _d): vignette.color.a = 0.35)
+	Events.player_damaged.connect(_on_damaged)
 	Events.uplink_progress.connect(_on_uplink)
 	_refresh_stats()
 	_on_band(0)
@@ -232,6 +245,7 @@ func _process(delta: float) -> void:
 	hit_timer = maxf(hit_timer - delta, 0.0)
 	hitmarker.modulate.a = clampf(hit_timer / 0.15, 0.0, 1.0)
 	vignette.color.a = maxf(vignette.color.a - delta * 0.8, 0.0)
+	_update_damage_arrows(delta)
 	if Game.integrity < 30.0:
 		vignette.color.a = maxf(vignette.color.a, 0.12 + sin(Time.get_ticks_msec() / 250.0) * 0.05)
 	if level == null or level.player == null:
@@ -270,3 +284,32 @@ func _process(delta: float) -> void:
 			get_tree().get_nodes_in_group("enemies").size(), level.squad.active(), level.director.intensity,
 			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
 			str(p.global_position.snapped(Vector3.ONE * 0.1))]
+
+func _on_damaged(_amount: float, from_dir: Vector3) -> void:
+	vignette.color.a = 0.35
+	if from_dir.length() < 0.01:
+		return
+	# reuse the oldest arrow
+	var slot: Dictionary = dmg_arrows[0]
+	for a in dmg_arrows:
+		if a.t < slot.t:
+			slot = a
+	slot.dir = from_dir
+	slot.t = 1.0
+
+func _update_damage_arrows(delta: float) -> void:
+	if level == null or level.player == null:
+		return
+	var yaw := level.player.rotation.y
+	for a in dmg_arrows:
+		a.t = maxf(a.t - delta, 0.0)
+		var node: Polygon2D = a.node
+		node.color.a = a.t * 0.85
+		if a.t <= 0.0:
+			continue
+		var d: Vector3 = a.dir
+		# angle of the source relative to where the player faces (0 = straight ahead)
+		var rel := wrapf(atan2(-d.x, -d.z) - yaw, -PI, PI)
+		var screen_angle := -rel
+		node.position = Vector2(sin(screen_angle), -cos(screen_angle)) * DMG_RADIUS
+		node.rotation = screen_angle
