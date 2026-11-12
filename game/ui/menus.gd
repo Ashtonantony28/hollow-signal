@@ -80,6 +80,7 @@ func show_main() -> void:
 		new_run_requested.emit(s))
 	b.grab_focus.call_deferred()
 	_difficulty_row()
+	_button("LOADOUT & ARMORY", func(): show_armory(show_main))
 	_button("SETTINGS", func(): show_settings(show_main))
 	_button("CONTROLS", func(): show_controls(show_main))
 	_button("QUIT", func(): get_tree().quit())
@@ -167,7 +168,59 @@ func show_patch_bay(offers: Array[StringName]) -> void:
 	if offers.is_empty():
 		_button("CONTINUE", func(): mod_chosen.emit(&""))
 
-func show_summary(victory: bool) -> void:
+func show_armory(back: Callable) -> void:
+	_clear()
+	_title("ARMORY", 34)
+	_title("Salvage: %d   ·   Best deck: %d   ·   Runs: %d" % [Profile.salvage, Profile.best_deck, Profile.runs], 15, Color(1.0, 0.85, 0.45))
+	var lo_names := []
+	for i in Profile.loadout.size():
+		lo_names.append("%d %s" % [i + 1, WeaponData.get_def(Profile.loadout[i]).name])
+	_title("Loadout:  " + "   ".join(lo_names), 15, Color(0.8, 0.9, 1.0))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(640, 380)
+	box.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	for id in WeaponData.ALL:
+		var d: Dictionary = WeaponData.get_def(id)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		list.add_child(row)
+		var info := Label.new()
+		var dps := float(d.damage) * float(d.pellets) / float(d.fire_interval)
+		info.text = "%s  (%s)\n%d dmg%s · %.0f dps · mag %d" % [d.name, d["class"], int(d.damage),
+			" x%d" % d.pellets if int(d.pellets) > 1 else "", dps, int(d.mag)]
+		info.custom_minimum_size = Vector2(300, 0)
+		row.add_child(info)
+		if Profile.is_unlocked(id):
+			for slot in Profile.LOADOUT_SIZE:
+				var b := Button.new()
+				b.text = str(slot + 1)
+				b.toggle_mode = false
+				b.disabled = Profile.loadout[slot] == id
+				b.custom_minimum_size = Vector2(44, 36)
+				var s := slot
+				var wid: StringName = id
+				b.pressed.connect(func():
+					Synth.play(&"retune", -6)
+					Profile.set_slot(s, wid)
+					show_armory(back))
+				row.add_child(b)
+		else:
+			var ub := Button.new()
+			var cost: int = d.unlock_cost
+			ub.text = "UNLOCK  %d salvage" % cost
+			ub.disabled = Profile.salvage < cost
+			var wid2: StringName = id
+			ub.pressed.connect(func():
+				if Profile.try_unlock(wid2):
+					Synth.play(&"objective", -4)
+				show_armory(back))
+			row.add_child(ub)
+	_button("BACK", back)
+
+func show_summary(victory: bool, salvage_gained: int = 0) -> void:
 	_clear()
 	_title("SIGNAL RESTORED" if victory else "LINEMAN LOST", 42, Color(0.4, 1.0, 0.6) if victory else Color(1.0, 0.35, 0.3))
 	var s := Game.stats
@@ -176,11 +229,13 @@ func show_summary(victory: bool) -> void:
 	var lines := "Deck reached: %d / %d\nTime: %d:%02d\nKills: %d\nAccuracy: %d%%\nDamage dealt: %d\nDamage taken: %d\nSeed: %d · %s" % [
 		Game.deck_index + 1, Game.DECK_COUNT, mins, secs, s.kills, int(Game.accuracy() * 100.0),
 		int(s.damage_dealt), int(s.damage_taken), Game.run_seed, Game.DIFFICULTY_NAMES[Settings.difficulty]]
+	lines += "\n\n+%d SALVAGE  (total %d)" % [salvage_gained, Profile.salvage]
 	var l := Label.new()
 	l.text = lines
 	l.add_theme_font_size_override("font_size", 18)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(l)
 	_button("RETRY SEED", func(): retry_seed_requested.emit()).grab_focus.call_deferred()
+	_button("ARMORY", func(): show_armory(func(): show_summary(victory, salvage_gained)))
 	_button("NEW RUN", func(): new_run_requested.emit(-1))
 	_button("MAIN MENU", func(): quit_to_menu_requested.emit())

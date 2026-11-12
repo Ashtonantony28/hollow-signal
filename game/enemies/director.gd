@@ -56,7 +56,7 @@ func _process(delta: float) -> void:
 
 ## Called when the player enters a room for the first time.
 func on_room_entered(room: int) -> void:
-	if visited.has(room):
+	if visited.has(room) or not enabled:
 		return
 	visited[room] = true
 	var t: StringName = level.layout.rooms[room].type

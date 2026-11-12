@@ -31,6 +31,7 @@ const BINDINGS := {
 	"weapon_4": [KEY_4],
 	"pause": [KEY_ESCAPE, KEY_P],
 	"debug_overlay": [KEY_F3],
+	"weapon_wheel": [KEY_TAB],
 }
 const MOUSE_BINDINGS := {
 	"fire": MOUSE_BUTTON_LEFT,

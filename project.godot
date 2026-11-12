@@ -16,6 +16,7 @@ boot_splash/show_image=false
 Events="*res://game/autoload/events.gd"
 Settings="*res://game/autoload/settings.gd"
 Synth="*res://game/autoload/synth.gd"
+Profile="*res://game/autoload/profile.gd"
 Game="*res://game/autoload/game.gd"
 
 [display]

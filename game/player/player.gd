@@ -23,6 +23,21 @@ const DASH_DIST := 8.0
 const DASH_TIME := 0.18
 const DASH_RECHARGE := 3.0
 const PULSE_RADIUS := 12.0
+const SLIDE_MIN_SPEED := 6.0
+const SLIDE_BOOST := 3.0
+const SLIDE_FRICTION := 5.5
+const MAX_AIR_JUMPS := 1
+const AIR_JUMP_VELOCITY := 5.0
+const WALLRUN_MIN_SPEED := 5.0
+const WALLRUN_SPEED := 9.5
+const WALLRUN_TIME := 1.3
+const WALLRUN_GRAVITY := 0.18
+const WALLJUMP_PUSH := 7.5
+const WALLJUMP_UP := 6.0
+const MANTLE_TIME := 0.28
+const MANTLE_MIN := 0.5
+const MANTLE_MAX := 1.9
+const ADS_MOVE_MULT := 0.6
 const REVEAL_RADIUS := 30.0
 
 var head: Node3D
@@ -51,6 +66,18 @@ var shake := 0.0
 var land_dip := 0.0
 var was_on_floor := true
 var hurt_flash := 0.0
+var air_jumps := 1
+var wall_running := false
+var wall_run_t := 0.0
+var wall_run_n := Vector3.ZERO
+var wallrun_lock := 0.0
+var mantle_t := 0.0
+var mantle_from := Vector3.ZERO
+var mantle_to := Vector3.ZERO
+var mantle_dir := Vector3.ZERO
+var aiming := false
+var cam_tilt := 0.0
+var recoil_debt := 0.0
 
 # Autopilot (smoke tests / attract mode). When ai_controlled, input comes from these fields.
 var ai_controlled := false
@@ -58,6 +85,7 @@ var ai_move := Vector2.ZERO        # x = strafe, y = forward
 var ai_fire := false
 var ai_jump := false
 var ai_sprint := false
+var ai_crouch := false
 
 func _ready() -> void:
 	add_to_group("player")
@@ -89,7 +117,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not alive or ai_controlled:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		rotate_look(-event.relative.x * Settings.mouse_sensitivity, -event.relative.y * Settings.mouse_sensitivity)
+		if weapons and weapons.wheel_open:
+			weapons.wheel_input(event.relative)
+			return
+		var sens := Settings.mouse_sensitivity * (lerpf(1.0, float(weapons.def().get("ads_fov", 0.8)), weapons.ads) if weapons else 1.0)
+		rotate_look(-event.relative.x * sens, -event.relative.y * sens)
 
 func rotate_look(yaw: float, pitch: float) -> void:
 	rotate_y(yaw)
@@ -112,6 +144,7 @@ func _pressed(action: StringName) -> bool:
 			&"jump": return ai_jump
 			&"sprint": return ai_sprint
 			&"fire": return ai_fire
+			&"crouch": return ai_crouch
 		return false
 	return Input.is_action_pressed(action)
 
@@ -146,16 +179,36 @@ func _physics_process(delta: float) -> void:
 	wish = wish.normalized() * inp.length()
 
 	var want_crouch := _pressed(&"crouch")
-	var sprinting := _pressed(&"sprint") and inp.y > 0.3 and not crouching
-	# start slide
-	if want_crouch and not crouching and on_floor and sprinting and slide_cd <= 0.0 and Vector2(velocity.x, velocity.z).length() > 8.0:
+	var sprinting := _pressed(&"sprint") and inp.y > 0.3 and not crouching and not aiming
+	var horiz := Vector3(velocity.x, 0, velocity.z)
+	var hspeed := horiz.length()
+	if on_floor:
+		air_jumps = MAX_AIR_JUMPS
+		wall_run_t = 0.0
+		wallrun_lock = 0.0
+	wallrun_lock = maxf(wallrun_lock - delta, 0.0)
+
+	# --- mantle in progress: scripted climb, no physics
+	if mantle_t > 0.0:
+		mantle_t -= delta
+		var k := 1.0 - mantle_t / MANTLE_TIME
+		global_position = mantle_from.lerp(mantle_to, ease(k, 0.6))
+		velocity = Vector3.ZERO
+		if mantle_t <= 0.0:
+			velocity = mantle_dir * RUN_SPEED * 0.8
+		_update_camera(delta, inp, false)
+		return
+
+	# --- start slide: from sprint or any fast ground movement; keeps (and boosts) momentum
+	if want_crouch and not crouching and on_floor and slide_cd <= 0.0 and hspeed > SLIDE_MIN_SPEED:
 		sliding = true
 		slide_timer = SLIDE_TIME
-		slide_dir = Vector3(velocity.x, 0, velocity.z).normalized()
+		slide_dir = horiz.normalized()
+		horiz = slide_dir * maxf(hspeed + SLIDE_BOOST, SLIDE_SPEED)
 		Synth.play(&"step", -6, 0.6)
 	_set_crouch(want_crouch or sliding, delta)
 
-	# dash
+	# --- dash (Snap Drive mod)
 	if not ai_controlled and Input.is_action_just_pressed("dash") and Game.mod_level(&"snap_drive") > 0 and dash_charges >= 1.0:
 		dash_charges -= 1.0
 		dash_timer = DASH_TIME
@@ -163,16 +216,43 @@ func _physics_process(delta: float) -> void:
 		dash_dir.y = 0
 		Synth.play(&"jump", -2, 1.6)
 
-	var horiz := Vector3(velocity.x, 0, velocity.z)
+	# --- wall-run detection: airborne, moving fast, pushing along a wall
+	var wall_n := Vector3.ZERO
+	if not on_floor and is_on_wall() and wallrun_lock <= 0.0:
+		wall_n = get_wall_normal()
+		wall_n.y = 0
+		wall_n = wall_n.normalized()
+	var can_wallrun := wall_n != Vector3.ZERO and hspeed > WALLRUN_MIN_SPEED and inp.y > 0.2 \
+		and absf(wall_n.dot(horiz.normalized())) < 0.75 and wall_run_t < WALLRUN_TIME
+	if can_wallrun:
+		if not wall_running:
+			wall_running = true
+			air_jumps = MAX_AIR_JUMPS
+			velocity.y = maxf(velocity.y, 1.5)
+			Synth.play(&"step", -6, 1.3)
+		wall_run_n = wall_n
+	elif wall_running:
+		wall_running = false
+		wallrun_lock = 0.25
+
 	if dash_timer > 0.0:
 		dash_timer -= delta
 		horiz = dash_dir.normalized() * (DASH_DIST / DASH_TIME)
 		velocity.y = maxf(velocity.y, 0.0)
+	elif wall_running:
+		wall_run_t += delta
+		var along := horiz - wall_run_n * horiz.dot(wall_run_n)
+		along = along.normalized() * maxf(along.length(), WALLRUN_SPEED)
+		horiz = along - wall_run_n * 1.5   # hug the wall
+		velocity.y -= GRAVITY * WALLRUN_GRAVITY * delta
+		velocity.y = maxf(velocity.y, -2.0)
 	elif sliding:
 		slide_timer -= delta
-		var spd := lerpf(RUN_SPEED * 0.8, SLIDE_SPEED, clampf(slide_timer / SLIDE_TIME, 0, 1))
-		horiz = slide_dir * spd + wish * 2.0
-		if slide_timer <= 0.0 or not want_crouch:
+		# momentum decays by friction rather than a fixed curve
+		var sp := maxf(horiz.length() - SLIDE_FRICTION * delta, 0.0)
+		horiz = slide_dir * sp + wish * 2.5
+		slide_dir = horiz.normalized() if horiz.length() > 0.1 else slide_dir
+		if slide_timer <= 0.0 or not want_crouch or sp < CROUCH_SPEED:
 			sliding = false
 			slide_cd = SLIDE_COOLDOWN
 	else:
@@ -181,28 +261,65 @@ func _physics_process(delta: float) -> void:
 			top = CROUCH_SPEED
 		elif sprinting:
 			top = SPRINT_SPEED
+		if aiming:
+			top *= ADS_MOVE_MULT
+		if weapons:
+			top *= float(weapons.def().get("move_mult", 1.0))
 		if on_floor:
 			var target := wish * top
-			horiz = horiz.move_toward(target, GROUND_ACCEL * delta)
+			# above top speed (after a slide-hop) bleed speed gently instead of snapping
+			var accel := GROUND_ACCEL if hspeed <= top + 0.5 else FRICTION * 1.5
+			horiz = horiz.move_toward(target, accel * delta)
 			if inp.length() < 0.05:
 				horiz = horiz.move_toward(Vector3.ZERO, FRICTION * delta * 3.0)
 		else:
+			# air strafing: accelerate freely up to `top`, steer (but don't add) above it
 			var add := wish * AIR_ACCEL * delta
 			var nh := horiz + add
-			if nh.length() > maxf(horiz.length(), top):
-				nh = nh.normalized() * maxf(horiz.length(), top)
+			if nh.length() > maxf(hspeed, top):
+				nh = nh.normalized() * maxf(hspeed, top)
 			horiz = nh
 
-	if not on_floor:
+	if not on_floor and not wall_running and dash_timer <= 0.0:
 		velocity.y -= GRAVITY * delta
-	if jump_buffer > 0.0 and coyote_timer > 0.0:
-		velocity.y = JUMP_VELOCITY
-		jump_buffer = 0.0
-		coyote_timer = 0.0
-		if sliding:
-			sliding = false
-			slide_cd = SLIDE_COOLDOWN * 0.5
-		Synth.play(&"jump", -8)
+
+	# --- jumping: ground (with coyote), wall-jump, then air jump (thrusters)
+	if jump_buffer > 0.0:
+		if coyote_timer > 0.0:
+			velocity.y = JUMP_VELOCITY
+			if sliding:
+				# slide-hop keeps the slide's speed
+				sliding = false
+				slide_cd = SLIDE_COOLDOWN * 0.5
+			jump_buffer = 0.0
+			coyote_timer = 0.0
+			Synth.play(&"jump", -8)
+		elif wall_running:
+			horiz += wall_run_n * WALLJUMP_PUSH
+			velocity.y = WALLJUMP_UP
+			wall_running = false
+			wallrun_lock = 0.35
+			jump_buffer = 0.0
+			Synth.play(&"jump", -4, 1.2)
+		elif _try_mantle(horiz):
+			jump_buffer = 0.0
+			_update_camera(delta, inp, false)
+			return
+		elif air_jumps > 0:
+			air_jumps -= 1
+			velocity.y = AIR_JUMP_VELOCITY
+			# thrusters let you redirect toward input
+			if wish.length() > 0.1:
+				horiz = horiz.lerp(wish * maxf(hspeed, RUN_SPEED), 0.6)
+			jump_buffer = 0.0
+			FX.ring(self, global_position + Vector3.UP * 0.1, 1.2, Color(0.6, 0.85, 1.0), 0.25)
+			Synth.play(&"jump", -4, 1.5)
+	# auto-mantle: airborne, pushing forward into a ledge
+	if not on_floor and inp.y > 0.5 and velocity.y < 2.0 and is_on_wall() and not wall_running:
+		if _try_mantle(horiz):
+			_update_camera(delta, inp, false)
+			return
+
 	velocity.x = horiz.x
 	velocity.z = horiz.z
 	move_and_slide()
@@ -240,6 +357,10 @@ func _set_crouch(c: bool, delta: float) -> void:
 
 func _update_camera(delta: float, inp: Vector2, sprinting: bool) -> void:
 	var speed := Vector2(velocity.x, velocity.z).length()
+	if recoil_debt > 0.0:
+		var back := minf(recoil_debt, delta * 0.6)
+		head.rotation.x -= back
+		recoil_debt -= back
 	# recoil spring
 	cam_kick_vel += (-cam_kick * 120.0 - cam_kick_vel * 16.0) * delta
 	cam_kick += cam_kick_vel * delta
@@ -257,13 +378,25 @@ func _update_camera(delta: float, inp: Vector2, sprinting: bool) -> void:
 	shake = maxf(shake - delta * 2.5, 0.0)
 	var sh := Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * shake * 0.05
 	camera.position = bob + sh + Vector3(0, -land_dip, 0)
-	camera.rotation = Vector3(cam_kick.x, cam_kick.y, -inp.x * 0.015 + (0.04 if sliding else 0.0))
-	var target_fov := Settings.fov + (6.0 if sprinting or sliding or dash_timer > 0 else 0.0)
+	var tilt_target := -inp.x * 0.015 + (0.04 if sliding else 0.0)
+	if wall_running:
+		tilt_target = -0.18 * signf(global_transform.basis.x.dot(wall_run_n))
+	cam_tilt = lerpf(cam_tilt, tilt_target, clampf(delta * 10.0, 0, 1))
+	camera.rotation = Vector3(cam_kick.x, cam_kick.y, cam_tilt)
+	var spd_kick := clampf((speed - RUN_SPEED) / 6.0, 0.0, 1.0) * 10.0
+	var target_fov := Settings.fov + spd_kick
+	if aiming and weapons:
+		target_fov = Settings.fov * float(weapons.def().get("ads_fov", 0.8))
 	camera.fov = lerpf(camera.fov, target_fov, delta * 8.0)
 	hurt_flash = maxf(hurt_flash - delta * 2.0, 0.0)
 
-func add_recoil(amount: float) -> void:
-	cam_kick_vel += Vector2(deg_to_rad(amount) * 14.0, deg_to_rad(randf_range(-amount, amount)) * 4.0)
+## Recoil moves the real aim (pitch up, patterned yaw) and adds a visual camera kick.
+## Most of the pitch is recovered automatically over the next few frames.
+func add_recoil(amount: float, yaw_deg: float = 0.0) -> void:
+	cam_kick_vel += Vector2(deg_to_rad(amount) * 10.0, deg_to_rad(yaw_deg) * 4.0)
+	var pitch := deg_to_rad(amount * 0.35)
+	rotate_look(-deg_to_rad(yaw_deg * 0.5), pitch)
+	recoil_debt += pitch * 0.7
 
 func add_shake(amount: float) -> void:
 	shake = clampf(shake + amount, 0.0, 1.5)
@@ -352,3 +485,41 @@ func _pad_look(delta: float) -> void:
 	v *= v.length()  # response curve: fine aim near centre
 	var k := PAD_LOOK_SPEED * delta * (Settings.mouse_sensitivity / 0.0025)
 	rotate_look(-v.x * k, -v.y * k)
+
+## Ledge check: wall ahead at chest height, free space above it, and a floor to stand on.
+func _try_mantle(horiz: Vector3) -> bool:
+	var fwd := -global_transform.basis.z
+	fwd.y = 0
+	fwd = fwd.normalized()
+	var space := get_world_3d().direct_space_state
+	var feet := global_position
+	var chest := feet + Vector3.UP * 1.0
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(chest, chest + fwd * 0.9, 1, [get_rid()]))
+	if hit.is_empty():
+		hit = space.intersect_ray(PhysicsRayQueryParameters3D.create(feet + Vector3.UP * 0.4, feet + Vector3.UP * 0.4 + fwd * 0.9, 1, [get_rid()]))
+		if hit.is_empty():
+			return false
+	var top_probe: Vector3 = hit.position + fwd * 0.45 + Vector3.UP * (MANTLE_MAX + 0.6 - (hit.position.y - feet.y))
+	var down := space.intersect_ray(PhysicsRayQueryParameters3D.create(top_probe, top_probe + Vector3.DOWN * (MANTLE_MAX + 0.6), 1, [get_rid()]))
+	if down.is_empty() or down.normal.y < 0.7:
+		return false
+	var rise: float = down.position.y - feet.y
+	if rise < MANTLE_MIN or rise > MANTLE_MAX:
+		return false
+	# room for the standing capsule on top?
+	var q := PhysicsShapeQueryParameters3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.38
+	cap.height = STAND_HEIGHT
+	q.shape = cap
+	q.transform = Transform3D(Basis(), down.position + Vector3.UP * (STAND_HEIGHT / 2.0 + 0.06))
+	q.collision_mask = 1
+	if space.intersect_shape(q, 1).size() > 0:
+		return false
+	mantle_from = global_position
+	mantle_to = down.position + Vector3.UP * 0.05
+	mantle_dir = fwd
+	mantle_t = MANTLE_TIME
+	land_dip = 0.1
+	Synth.play(&"step", -2, 0.7)
+	return true

@@ -27,6 +27,9 @@ var hit_timer := 0.0
 var debug := false
 var cross_parts: Array[ColorRect] = []
 var dmg_root: Control
+var scope: Control
+var wheel: Control
+var slots_label: Label
 var dmg_arrows: Array = []   # {node, dir (world), t}
 const DMG_RADIUS := 120.0
 
@@ -140,6 +143,22 @@ func _ready() -> void:
 		arrow.color = Color(1.0, 0.2, 0.15, 0.0)
 		dmg_root.add_child(arrow)
 		dmg_arrows.append({"node": arrow, "dir": Vector3.ZERO, "t": 0.0})
+	scope = ScopeDraw.new()
+	scope.hud = self
+	scope.set_anchors_preset(Control.PRESET_FULL_RECT)
+	scope.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(scope)
+	root.move_child(scope, 1)
+	wheel = WheelDraw.new()
+	wheel.hud = self
+	wheel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	wheel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(wheel)
+	slots_label = _label(root, "", 13, Color(0.75, 0.8, 0.85))
+	slots_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	slots_label.position = Vector2(-560, -40)
+	slots_label.custom_minimum_size = Vector2(520, 20)
+	slots_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	debug_label = _label(root, "", 13, Color(0.7, 1.0, 0.7))
 	debug_label.position = Vector2(10, 10)
 	debug_label.visible = false
@@ -278,6 +297,21 @@ func _process(delta: float) -> void:
 		boss_bar.value = b.hp
 		boss_label.text = "THE CONDUCTOR — PHASE %d  [%s]" % [b.phase, ThemeData.BAND_NAMES[b.band]]
 	_refresh_stats()
+	var ws := p.weapons
+	scope.queue_redraw()
+	wheel.queue_redraw()
+	# dynamic crosshair: gap follows the real spread; hidden when scoped
+	var gap := 4.0 + ws.current_spread() * 6.0
+	cross_parts[0].position = Vector2(-gap - 7, -1)
+	cross_parts[1].position = Vector2(gap, -1)
+	cross_parts[2].position = Vector2(-1, -gap - 7)
+	cross_parts[3].position = Vector2(-1, gap)
+	crosshair.visible = not (ws.def().get("scope", false) and ws.ads > 0.95)
+	var parts := []
+	for i in Game.loadout.size():
+		var nm: String = WeaponData.get_def(Game.loadout[i]).name
+		parts.append(("[%d %s]" if Game.loadout[i] == ws.current else "%d %s") % [i + 1, nm])
+	slots_label.text = "   ".join(parts) + "    TAB wheel"
 	if debug:
 		debug_label.text = "FPS %d | seed %d deck %d | enemies %d | tokens %d | intensity %.2f | draw %d | pos %s" % [
 			Engine.get_frames_per_second(), Game.run_seed, Game.deck_index + 1,
@@ -313,3 +347,54 @@ func _update_damage_arrows(delta: float) -> void:
 		var screen_angle := -rel
 		node.position = Vector2(sin(screen_angle), -cos(screen_angle)) * DMG_RADIUS
 		node.rotation = screen_angle
+
+## Radial weapon wheel (hold Tab). Slots run clockwise from the top.
+class WheelDraw extends Control:
+	var hud
+	func _draw() -> void:
+		var ws = hud.level.player.weapons if hud.level and hud.level.player else null
+		if ws == null or not ws.wheel_open:
+			return
+		var c := size / 2.0
+		var n: int = Game.loadout.size()
+		draw_circle(c, 190.0, Color(0, 0, 0, 0.55))
+		for i in n:
+			var ang := i * TAU / n
+			var dir := Vector2(sin(ang), -cos(ang))
+			var p := c + dir * 120.0
+			var sel: bool = ws.wheel_choice == i
+			var cur: bool = Game.loadout[i] == ws.current
+			draw_circle(p, 52.0, Color(0.95, 0.55, 0.15, 0.85) if sel else Color(0.15, 0.17, 0.2, 0.9))
+			if cur:
+				draw_arc(p, 54.0, 0, TAU, 32, Color(1, 1, 1, 0.8), 2.0)
+			var d: Dictionary = WeaponData.get_def(Game.loadout[i])
+			var font := ThemeDB.fallback_font
+			var a: Dictionary = Game.ammo[Game.loadout[i]]
+			var lines := ["%d" % (i + 1), d.name, "%d / %s" % [a.mag, "inf" if a.reserve < 0 else str(a.reserve)]]
+			for li in lines.size():
+				var fs := 14 if li != 1 else 15
+				var w := font.get_string_size(lines[li], HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				draw_string(font, p + Vector2(-w / 2.0, -14 + li * 18), lines[li], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+		draw_string(ThemeDB.fallback_font, c + Vector2(-60, 6), "SELECT WEAPON", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.7))
+
+## Scope overlay for marksman weapons when fully aimed.
+class ScopeDraw extends Control:
+	var hud
+	func _draw() -> void:
+		var ws = hud.level.player.weapons if hud.level and hud.level.player else null
+		if ws == null or not ws.def().get("scope", false) or ws.ads < 0.95:
+			return
+		var c := size / 2.0
+		var r := minf(size.x, size.y) * 0.42
+		# black mask outside the lens: four rects + ring
+		draw_rect(Rect2(0, 0, c.x - r, size.y), Color.BLACK)
+		draw_rect(Rect2(c.x + r, 0, size.x - c.x - r, size.y), Color.BLACK)
+		draw_rect(Rect2(c.x - r, 0, r * 2, c.y - r), Color.BLACK)
+		draw_rect(Rect2(c.x - r, c.y + r, r * 2, size.y - c.y - r), Color.BLACK)
+		draw_arc(c, r + 30.0, 0, TAU, 96, Color.BLACK, 62.0)
+		draw_arc(c, r, 0, TAU, 96, Color(0.1, 0.1, 0.1), 4.0)
+		var col: Color = ThemeData.BAND_COLORS[ws.band]
+		draw_line(c - Vector2(r, 0), c - Vector2(14, 0), Color(0, 0, 0, 0.9), 2.0)
+		draw_line(c + Vector2(14, 0), c + Vector2(r, 0), Color(0, 0, 0, 0.9), 2.0)
+		draw_line(c + Vector2(0, 14), c + Vector2(0, r), Color(0, 0, 0, 0.9), 2.0)
+		draw_circle(c, 2.5, col)
