@@ -77,8 +77,18 @@ static func quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3
 	var n := (c - a).cross(b - a).normalized()
 	st.set_color(color)
 	st.set_normal(n)
-	st.add_vertex(a); st.add_vertex(b); st.add_vertex(c)
-	st.add_vertex(a); st.add_vertex(c); st.add_vertex(d)
+	for v in [a, b, c, a, c, d]:
+		st.set_uv(planar_uv(v, n))
+		st.add_vertex(v)
+
+## World-space planar UV (1 unit = 1 metre) along the dominant normal axis.
+static func planar_uv(v: Vector3, n: Vector3) -> Vector2:
+	var an := n.abs()
+	if an.y >= an.x and an.y >= an.z:
+		return Vector2(v.x, v.z)
+	if an.x >= an.z:
+		return Vector2(v.z * signf(n.x), -v.y)
+	return Vector2(-v.x * signf(n.z), -v.y)
 
 ## Quad whose winding is chosen so the visible side faces `facing`.
 static func quad_facing(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, color: Color, facing: Vector3) -> void:
@@ -96,7 +106,9 @@ static func tri_facing(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, colo
 		n = -n
 	st.set_color(color)
 	st.set_normal(n.normalized())
-	st.add_vertex(a); st.add_vertex(b); st.add_vertex(c)
+	for v in [a, b, c]:
+		st.set_uv(planar_uv(v, n))
+		st.add_vertex(v)
 
 ## Axis-aligned box appended to a SurfaceTool (all six faces, outward).
 static func box_st(st: SurfaceTool, center: Vector3, size: Vector3, color: Color) -> void:

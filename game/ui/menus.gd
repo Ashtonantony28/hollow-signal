@@ -115,6 +115,14 @@ func show_settings(back: Callable) -> void:
 	_slider("Volume", 0.0, 1.0, Settings.master_volume, func(v):
 		Settings.master_volume = v
 		Settings.apply())
+	var tier := OptionButton.new()
+	tier.add_item("Renderer: Fast (OpenGL, low-end PCs)")
+	tier.add_item("Renderer: Quality (Vulkan: AO, volumetric fog, shadows)")
+	tier.selected = Settings.current_tier()
+	tier.item_selected.connect(func(i):
+		if i != Settings.current_tier():
+			Settings.set_tier_and_restart(i))
+	box.add_child(tier)
 	var q := OptionButton.new()
 	for n in ["Quality: Low (fastest)", "Quality: Medium", "Quality: High"]:
 		q.add_item(n)

@@ -4,3 +4,4 @@ build/
 screenshots/
 *.tmp
 .DS_Store
+override.cfg
