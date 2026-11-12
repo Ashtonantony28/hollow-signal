@@ -14,8 +14,10 @@ graphics.
 Download `HollowSignal-windows` from the latest CI run (Actions tab) and run `HollowSignal.exe`.
 Low-end PC: Settings → Render scale 0.6–0.7 and Quality Low.
 
-Controls: WASD, mouse, Space jump, Shift sprint, Ctrl/C crouch (slide while sprinting), LMB fire (hold for
-Arc Lance), R reload, 1–4 weapons, **Q retune band**, **F Pulse**, E interact, Esc pause, F3 debug overlay.
+Controls: WASD, mouse, Space jump (again in the air = double jump; at a ledge = mantle; on a wall = wall-jump),
+Shift sprint, Ctrl/C crouch (slide when moving fast), LMB fire, RMB aim down sights, R reload, 1–4 / wheel /
+hold Tab weapons, **Q retune band**, **F Pulse**, E interact, Esc pause, F3 debug overlay.
+Loadout & Armory in the main menu: pick 4 guns, unlock more with Salvage earned per run.
 
 Core mechanic: enemy shields glow amber/teal/violet. Retune (Q) to the same band for triple shield damage.
 

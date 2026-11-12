@@ -28,10 +28,15 @@ static func build(layout: Dictionary, quality: int = 1) -> Node3D:
 				continue
 			var ck := Vector2i(x / CHUNK, y / CHUNK)
 			if not tools.has(ck):
-				var st := SurfaceTool.new()
-				st.begin(Mesh.PRIMITIVE_TRIANGLES)
-				tools[ck] = st
-			var st: SurfaceTool = tools[ck]
+				var trio := []
+				for _i in 3:
+					var t := SurfaceTool.new()
+					t.begin(Mesh.PRIMITIVE_TRIANGLES)
+					trio.append(t)
+				tools[ck] = trio
+			var st_floor: SurfaceTool = tools[ck][0]
+			var st_ceil: SurfaceTool = tools[ck][1]
+			var st: SurfaceTool = tools[ck][2]
 			var x0 := x * C
 			var x1 := x0 + C
 			var z0 := y * C
@@ -43,9 +48,9 @@ static func build(layout: Dictionary, quality: int = 1) -> Node3D:
 			if (x + y) % 2 == 0:
 				fcol = fcol.lightened(0.04)
 			fcol.a = 1.0
-			Meshes.quad(st, Vector3(x0, 0, z0), Vector3(x1, 0, z0), Vector3(x1, 0, z1), Vector3(x0, 0, z1), fcol)
+			Meshes.quad(st_floor, Vector3(x0, 0, z0), Vector3(x1, 0, z0), Vector3(x1, 0, z1), Vector3(x0, 0, z1), fcol)
 			var ccol: Color = (theme.wall as Color).darkened(0.3)
-			Meshes.quad(st, Vector3(x0, ch, z0), Vector3(x0, ch, z1), Vector3(x1, ch, z1), Vector3(x1, ch, z0), ccol)
+			Meshes.quad(st_ceil, Vector3(x0, ch, z0), Vector3(x0, ch, z1), Vector3(x1, ch, z1), Vector3(x1, ch, z0), ccol)
 			if is_corr and (x + y) % 3 == 0:
 				if not trims.has(ck):
 					var tsc := SurfaceTool.new()
@@ -81,25 +86,34 @@ static func build(layout: Dictionary, quality: int = 1) -> Node3D:
 						trims[ck] = ts2
 					_strip(trims[ck], x0, x1, z0, z1, d, 0.25, theme.trim)
 
-	var geo_mat := Meshes.vertex_color_mat()
+	var mats := [TexGen.material(TexGen.floor_set(), 0.5, 0.35), TexGen.material(TexGen.ceiling_set(), 0.25, 0.1), TexGen.material(TexGen.wall_set(), 0.15, 0.15)]
 	var body := StaticBody3D.new()
 	body.name = "WorldBody"
 	body.collision_layer = 1
 	body.collision_mask = 0
 	root.add_child(body)
 	for ck in tools:
-		var st: SurfaceTool = tools[ck]
-		var arrays := st.commit_to_arrays()
 		var mesh := ArrayMesh.new()
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var faces := PackedVector3Array()
+		for i in 3:
+			var st: SurfaceTool = tools[ck][i]
+			var arrays := st.commit_to_arrays()
+			if arrays[Mesh.ARRAY_VERTEX] == null or (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+				continue
+			var st2 := SurfaceTool.new()
+			st2.create_from_arrays(arrays)
+			st2.generate_tangents()
+			arrays = st2.commit_to_arrays()
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+			mesh.surface_set_material(mesh.get_surface_count() - 1, mats[i])
+			faces.append_array(arrays[Mesh.ARRAY_VERTEX])
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
-		mi.material_override = geo_mat
 		mi.name = "Chunk_%d_%d" % [ck.x, ck.y]
 		root.add_child(mi)
 		var cs := CollisionShape3D.new()
 		var shape := ConcavePolygonShape3D.new()
-		shape.set_faces(arrays[Mesh.ARRAY_VERTEX])
+		shape.set_faces(faces)
 		cs.shape = shape
 		body.add_child(cs)
 	var trim_mat := StandardMaterial3D.new()
@@ -181,6 +195,11 @@ static func _build_props(root: Node3D, layout: Dictionary, theme: Dictionary) ->
 				size = Vector3(1.6, ch, 1.6)
 				col = (theme.wall as Color).darkened(0.1)
 		var mi := Meshes.box(size, col)
+		var pm := TexGen.material(TexGen.wall_set(), 1.0, 0.25)
+		pm.vertex_color_use_as_albedo = false
+		pm.albedo_color = col
+		pm.uv1_scale = Vector3(size.x * 0.5, size.y * 0.5, 1.0) if p.kind != &"pillar" else Vector3(1, 2, 1)
+		mi.material_override = pm
 		mi.position = base + Vector3(0, size.y / 2.0, 0)
 		props_node.add_child(mi)
 		if p.kind == &"crate":
@@ -217,7 +236,9 @@ static func _build_lights(root: Node3D, layout: Dictionary, theme: Dictionary, q
 			l.light_energy = 2.2
 			l.omni_range = span * (0.85 if positions.size() == 1 else 0.7) + 6.0
 			l.omni_attenuation = 0.8
-			l.shadow_enabled = false
+			# shadows only in the Quality tier, only for the big rooms' lights
+			l.shadow_enabled = is_quality_renderer() and quality >= 1 and room.type in [&"arena", &"uplink", &"boss", &"vault"]
+			l.light_volumetric_fog_energy = 1.5
 			lights.add_child(l)
 			# visible fixture
 			var fix := Meshes.box(Vector3(1.4, 0.15, 1.4), theme.light, 3.0)
@@ -240,6 +261,29 @@ static func make_environment(theme: Dictionary, quality: int) -> WorldEnvironmen
 	env.glow_enabled = quality >= 1
 	env.glow_intensity = 0.6
 	env.glow_bloom = 0.05
+	if is_quality_renderer():
+		# Forward+ "Quality" tier: screen-space AO/GI, volumetric fog, stronger bloom
+		env.tonemap_mode = Environment.TONE_MAPPER_ACES
+		env.tonemap_exposure = 1.2
+		env.ssao_enabled = true
+		env.ssao_radius = 1.2
+		env.ssao_intensity = 2.2
+		env.ssil_enabled = quality >= 1
+		env.ssil_intensity = 0.8
+		env.volumetric_fog_enabled = true
+		env.volumetric_fog_density = 0.012
+		env.volumetric_fog_albedo = (theme.light as Color).lerp(theme.fog, 0.5)
+		env.volumetric_fog_emission = (theme.fog as Color) * 0.3
+		env.volumetric_fog_length = 48.0
+		env.fog_enabled = false
+		env.glow_enabled = true
+		env.glow_intensity = 0.9
+		env.glow_bloom = 0.12
+		env.glow_hdr_threshold = 0.9
+		env.ambient_light_energy = 1.15
+		env.adjustment_enabled = true
+		env.adjustment_contrast = 1.08
+		env.adjustment_saturation = 1.1
 	we.environment = env
 	return we
 
@@ -302,8 +346,9 @@ static func _build_platforms(root: Node3D, layout: Dictionary, theme: Dictionary
 		# hazard stripes at the foot of the ramp
 		Meshes.box_st(trim, lo - dir * 0.15 + Vector3.UP * 0.02, perp * C + dir * 0.2 + Vector3.UP * 0.04, theme.trim)
 	var mi := MeshInstance3D.new()
+	st.generate_tangents()
 	mi.mesh = st.commit()
-	mi.material_override = Meshes.vertex_color_mat()
+	mi.material_override = TexGen.material(TexGen.floor_set(), 0.5, 0.35)
 	node.add_child(mi)
 	var tm := MeshInstance3D.new()
 	tm.mesh = trim.commit()
@@ -388,3 +433,6 @@ static func _build_dressing(root: Node3D, layout: Dictionary, theme: Dictionary)
 	m.vertex_color_use_as_albedo = true
 	gm.material_override = m
 	node.add_child(gm)
+
+static func is_quality_renderer() -> bool:
+	return RenderingServer.get_rendering_device() != null

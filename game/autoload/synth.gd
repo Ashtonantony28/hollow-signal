@@ -13,6 +13,11 @@ var _rng := RandomNumberGenerator.new()
 ## Each recipe: [duration, generator callable name, params]
 const RECIPES := {
 	"rivet": {"dur": 0.16, "kind": "shot", "freq": 520.0, "noise": 0.55, "decay": 28.0},
+	"hammer": {"dur": 0.4, "kind": "shot", "freq": 180.0, "noise": 0.75, "decay": 11.0},
+	"needle": {"dur": 0.09, "kind": "shot", "freq": 760.0, "noise": 0.5, "decay": 40.0},
+	"carbine": {"dur": 0.14, "kind": "shot", "freq": 380.0, "noise": 0.65, "decay": 26.0},
+	"longwire": {"dur": 0.6, "kind": "zap", "freq": 240.0, "noise": 0.6, "decay": 6.0},
+	"hailstorm": {"dur": 0.12, "kind": "shot", "freq": 300.0, "noise": 0.7, "decay": 30.0},
 	"scatter": {"dur": 0.32, "kind": "shot", "freq": 140.0, "noise": 0.9, "decay": 13.0},
 	"lance": {"dur": 0.45, "kind": "zap", "freq": 880.0, "noise": 0.15, "decay": 7.0},
 	"lance_charge": {"dur": 0.8, "kind": "rise", "freq": 200.0, "noise": 0.05, "decay": 0.5},

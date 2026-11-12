@@ -44,6 +44,9 @@ func _ready() -> void:
 	if args.has("tour"):
 		_tour.call_deferred()
 		return
+	if args.has("guns"):
+		_gun_gallery.call_deferred()
+		return
 	if args.has("skip-menu") or args.has("autoplay"):
 		start_run(int(args.get("seed", "-1")), int(args.get("deck", "0")))
 	else:
@@ -164,8 +167,10 @@ func _on_run_finished(victory: bool) -> void:
 
 func _show_summary(victory: bool) -> void:
 	Game.in_run = false
+	Engine.time_scale = float(args.get("timescale", "1"))
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	menus.show_summary(victory)
+	var gained := Profile.award_run(Game.stats.kills, Game.deck_index, victory) if not args.has("autoplay") else 0
+	menus.show_summary(victory, gained)
 	if args.has("autoplay") and args.has("quit-after"):
 		_report_and_quit()
 
@@ -255,4 +260,39 @@ func _tour() -> void:
 			for e in get_tree().get_nodes_in_group("enemies"):
 				e.queue_free()
 			await get_tree().process_frame
+	get_tree().quit(0)
+
+## Visual QA: every weapon at hip and fully aimed, saved to --guns=DIR.
+func _gun_gallery() -> void:
+	var dir: String = args.guns
+	DirAccess.make_dir_recursive_absolute(dir)
+	Game.new_run(5)
+	Game.loadout = WeaponData.ALL.duplicate()
+	for id in WeaponData.ALL:
+		Game.ammo[id] = {"mag": WeaponData.get_def(id).mag, "reserve": 99}
+	level = Level.new(0, 4242)
+	add_child(level)
+	hud = HUD.new()
+	add_child(hud)
+	hud.level = level
+	level.director.enabled = false
+	var room: Dictionary = level.layout.rooms[level.layout.uplink]
+	level.player.global_position = DeckGen.cell_to_world(room.rect.position + Vector2i(1, 1)) + Vector3.UP * 0.1
+	level.player.look_at_point(DeckGen.cell_to_world(room.center) + Vector3.UP * 1.5, 10.0)
+	var ws := level.player.weapons
+	level.player.set_meta("hold_ads", true)
+	for id in WeaponData.ALL:
+		ws.equip(id, true)
+		ws.switching = 0.0
+		ws.ads = 0.0
+		for _i in 15:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("%s/%s_hip.png" % [dir, id])
+		ws.ads = 1.0
+		level.player.aiming = true
+		for _i in 4:
+			ws.ads = 1.0
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("%s/%s_ads.png" % [dir, id])
+		level.player.aiming = false
 	get_tree().quit(0)

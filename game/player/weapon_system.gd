@@ -21,11 +21,19 @@ var muzzle_flash: MeshInstance3D
 var flash_light: OmniLight3D
 var sway := Vector2.ZERO
 var kick := 0.0
-var unlocked: Array[StringName] = [&"rivet", &"scatter", &"lance", &"launcher"]
 var fire_held_prev := false
+var ads := 0.0              # 0 hip .. 1 fully aimed
+var bloom_cur := 0.0
+var shot_index := 0
+var spin := 0.0             # Hailstorm spin-up
+var wheel_open := false
+var wheel_vec := Vector2.ZERO
+var wheel_choice := -1
+const ADS_POS := Vector3(0.0, -0.118, -0.3)
+const WHEEL_TIMESCALE := 0.3
 
 func _ready() -> void:
-	for id in WeaponData.ORDER:
+	for id in WeaponData.ALL:
 		var m := _build_model(id)
 		m.visible = false
 		add_child(m)
@@ -39,7 +47,18 @@ func _ready() -> void:
 	flash_light.omni_range = 6.0
 	flash_light.light_color = Color(1, 0.85, 0.6)
 	add_child(flash_light)
-	equip(&"rivet", true)
+	# small key light riding with the camera so the viewmodel's bevels and metal read in dark rooms
+	var key := OmniLight3D.new()
+	key.position = Vector3(0.35, 0.3, 0.05)
+	key.omni_range = 1.1
+	key.omni_attenuation = 1.5
+	key.light_energy = 0.45
+	key.light_specular = 1.2
+	key.light_color = Color(0.85, 0.9, 1.0)
+	add_child(key)
+	var lo: Array = Game.loadout if not Game.loadout.is_empty() else WeaponData.DEFAULT_LOADOUT
+	current = lo[0]
+	equip(lo[0], true)
 	set_band(0, true)
 
 # ---------------------------------------------------------------- viewmodels
@@ -48,8 +67,8 @@ func _build_model(id: StringName) -> Node3D:
 	var root := Node3D.new()
 	root.position = VM_POS
 	root.scale = Vector3.ONE * 0.72
-	var body_col := Color(0.30, 0.31, 0.35)
-	var metal := Color(0.45, 0.46, 0.5)
+	var body_col := Color(0.17, 0.18, 0.21)
+	var metal := Color(0.32, 0.33, 0.36)
 	match id:
 		&"rivet":
 			_part(root, Meshes.box(Vector3(0.07, 0.09, 0.3), body_col), Vector3(0, 0, 0))
@@ -70,6 +89,42 @@ func _build_model(id: StringName) -> Node3D:
 			_accent(root, Meshes.box(Vector3(0.02, 0.02, 0.55), Color.WHITE, 3.0), Vector3(0.05, 0.03, -0.12))
 			_accent(root, Meshes.box(Vector3(0.02, 0.02, 0.55), Color.WHITE, 3.0), Vector3(-0.05, 0.03, -0.12))
 			_accent(root, Meshes.sphere(0.035, Color.WHITE, 4.0), Vector3(0, 0, -0.44))
+		&"hammer":
+			_part(root, Meshes.box(Vector3(0.06, 0.08, 0.16), body_col), Vector3(0, 0, 0))
+			_part(root, Meshes.cyl(0.045, 0.09, metal, 0.0, 6), Vector3(0, 0, -0.06), Vector3(90, 0, 0))
+			_part(root, Meshes.cyl(0.018, 0.22, metal), Vector3(0, 0.02, -0.2), Vector3(90, 0, 0))
+			_part(root, Meshes.box(Vector3(0.05, 0.14, 0.06), Color(0.35, 0.22, 0.14)), Vector3(0, -0.1, 0.07), Vector3(-20, 0, 0))
+			_accent(root, Meshes.box(Vector3(0.015, 0.02, 0.2), Color.WHITE, 3.0), Vector3(0, 0.045, -0.17))
+		&"needle":
+			_part(root, Meshes.box(Vector3(0.07, 0.1, 0.34), body_col), Vector3(0, 0, -0.04))
+			_part(root, Meshes.box(Vector3(0.04, 0.2, 0.05), metal), Vector3(0, -0.14, -0.06))
+			_part(root, Meshes.box(Vector3(0.05, 0.12, 0.06), metal), Vector3(0, -0.1, 0.1), Vector3(-15, 0, 0))
+			_part(root, Meshes.cyl(0.02, 0.12, metal), Vector3(0, 0.01, -0.26), Vector3(90, 0, 0))
+			_accent(root, Meshes.box(Vector3(0.075, 0.012, 0.24), Color.WHITE, 3.0), Vector3(0, 0.054, -0.04))
+		&"carbine":
+			_part(root, Meshes.box(Vector3(0.08, 0.11, 0.5), body_col), Vector3(0, 0, -0.08))
+			_part(root, Meshes.box(Vector3(0.06, 0.09, 0.22), metal), Vector3(0, -0.02, 0.24))
+			_part(root, Meshes.box(Vector3(0.045, 0.16, 0.07), metal), Vector3(0, -0.13, -0.08), Vector3(12, 0, 0))
+			_part(root, Meshes.box(Vector3(0.05, 0.13, 0.06), metal), Vector3(0, -0.1, 0.08), Vector3(-15, 0, 0))
+			_part(root, Meshes.cyl(0.02, 0.18, metal), Vector3(0, 0.01, -0.42), Vector3(90, 0, 0))
+			_part(root, Meshes.box(Vector3(0.03, 0.04, 0.12), metal), Vector3(0, 0.08, -0.02))
+			_accent(root, Meshes.box(Vector3(0.012, 0.012, 0.4), Color.WHITE, 3.0), Vector3(0.042, 0.02, -0.1))
+			_accent(root, Meshes.box(Vector3(0.012, 0.012, 0.4), Color.WHITE, 3.0), Vector3(-0.042, 0.02, -0.1))
+		&"longwire":
+			_part(root, Meshes.box(Vector3(0.07, 0.1, 0.7), body_col), Vector3(0, 0, -0.12))
+			_part(root, Meshes.cyl(0.035, 0.26, metal, 0.0, 10), Vector3(0, 0.1, -0.06), Vector3(90, 0, 0))
+			_part(root, Meshes.cyl(0.016, 0.3, metal), Vector3(0, 0.01, -0.6), Vector3(90, 0, 0))
+			_part(root, Meshes.box(Vector3(0.06, 0.12, 0.24), metal), Vector3(0, -0.03, 0.3))
+			_part(root, Meshes.box(Vector3(0.05, 0.13, 0.06), metal), Vector3(0, -0.1, 0.1), Vector3(-15, 0, 0))
+			_accent(root, Meshes.cyl(0.037, 0.02, Color.WHITE, 3.0, 10), Vector3(0, 0.1, -0.19), Vector3(90, 0, 0))
+		&"hailstorm":
+			_part(root, Meshes.box(Vector3(0.12, 0.14, 0.5), body_col), Vector3(0, 0, -0.04))
+			_part(root, Meshes.box(Vector3(0.1, 0.12, 0.12), metal), Vector3(-0.08, -0.08, -0.02))
+			for i in 4:
+				var a := i * TAU / 4.0
+				_part(root, Meshes.cyl(0.014, 0.34, metal), Vector3(cos(a) * 0.03, sin(a) * 0.03, -0.42), Vector3(90, 0, 0))
+			_part(root, Meshes.box(Vector3(0.06, 0.14, 0.07), metal), Vector3(0, -0.12, 0.12), Vector3(-15, 0, 0))
+			_accent(root, Meshes.cyl(0.05, 0.03, Color.WHITE, 3.0, 10), Vector3(0, 0, -0.27), Vector3(90, 0, 0))
 		&"launcher":
 			_part(root, Meshes.cyl(0.075, 0.5, body_col, 0.0, 10), Vector3(0, 0, -0.1), Vector3(90, 0, 0))
 			_part(root, Meshes.box(Vector3(0.07, 0.16, 0.08), metal), Vector3(0, -0.13, 0.08), Vector3(-15, 0, 0))
@@ -106,7 +161,7 @@ func muzzle_pos() -> Vector3:
 func equip(id: StringName, instant: bool = false) -> void:
 	if id == current and not instant:
 		return
-	if not id in unlocked:
+	if not id in Game.loadout and not Game.loadout.is_empty():
 		return
 	models[current].visible = false
 	current = id
@@ -163,7 +218,7 @@ func _finish_reload() -> void:
 	_emit_ammo()
 
 func add_feedstock(fraction: float) -> void:
-	for id in WeaponData.ORDER:
+	for id in Game.loadout:
 		var mx := Game.reserve_max(id)
 		if mx < 0:
 			continue
@@ -178,6 +233,8 @@ func _process(delta: float) -> void:
 	if player == null or not player.alive:
 		return
 	cooldown = maxf(cooldown - delta, 0.0)
+	if cooldown <= 0.0 and not player._pressed(&"fire"):
+		shot_index = 0
 	switching = maxf(switching - delta, 0.0)
 	if retuning > 0.0:
 		retuning = maxf(retuning - delta, 0.0)
@@ -188,13 +245,28 @@ func _process(delta: float) -> void:
 			_finish_reload()
 	if not player.ai_controlled:
 		_handle_input()
+	var want_ads := player._pressed(&"alt_fire") and reloading <= 0.0 and switching <= 0.0 and not player.sliding and not wheel_open
+	if not player.has_meta("hold_ads"):
+		player.aiming = want_ads
+		ads = move_toward(ads, 1.0 if want_ads else 0.0, delta / 0.16)
+	bloom_cur = move_toward(bloom_cur, 0.0, delta * 6.0)
 	_handle_fire(delta)
 	_animate(delta)
 
 func _handle_input() -> void:
-	for i in WeaponData.ORDER.size():
+	for i in Game.loadout.size():
 		if Input.is_action_just_pressed("weapon_%d" % (i + 1)):
-			equip(WeaponData.ORDER[i])
+			equip(Game.loadout[i])
+	if Input.is_action_just_pressed("weapon_wheel"):
+		wheel_open = true
+		wheel_vec = Vector2.ZERO
+		wheel_choice = -1
+		Engine.time_scale = WHEEL_TIMESCALE
+	elif wheel_open and not Input.is_action_pressed("weapon_wheel"):
+		wheel_open = false
+		Engine.time_scale = 1.0
+		if wheel_choice >= 0:
+			equip(Game.loadout[wheel_choice])
 	if Input.is_action_just_pressed("weapon_next"):
 		cycle(1)
 	if Input.is_action_just_pressed("weapon_prev"):
@@ -205,8 +277,17 @@ func _handle_input() -> void:
 		start_reload()
 
 func cycle(dir: int) -> void:
-	var idx := WeaponData.ORDER.find(current)
-	equip(WeaponData.ORDER[posmod(idx + dir, WeaponData.ORDER.size())])
+	var lo: Array = Game.loadout
+	var idx := lo.find(current)
+	equip(lo[posmod(idx + dir, lo.size())])
+
+## Mouse motion while the wheel is open picks a slot by direction (slots clockwise from the top).
+func wheel_input(rel: Vector2) -> void:
+	wheel_vec = (wheel_vec + rel).limit_length(120.0)
+	if wheel_vec.length() > 30.0:
+		var ang := fposmod(atan2(wheel_vec.x, -wheel_vec.y), TAU)
+		var n: int = Game.loadout.size()
+		wheel_choice = int(round(ang / (TAU / n))) % n
 
 func can_fire() -> bool:
 	return cooldown <= 0.0 and reloading <= 0.0 and retuning <= 0.0 and switching <= 0.0
@@ -234,7 +315,11 @@ func _handle_fire(delta: float) -> void:
 			Synth.play(&"empty")
 			start_reload()
 		return
-	if (just or (held and d.auto)) and can_fire():
+	if d.has("spinup"):
+		spin = move_toward(spin, float(d.spinup) if held else 0.0, delta * (1.0 if held else 2.0))
+		if held and spin < float(d.spinup):
+			return
+	if (just or (held and d.auto)) and can_fire() and not wheel_open:
 		_fire(d)
 
 func _fire(d: Dictionary) -> void:
@@ -249,14 +334,22 @@ func _fire(d: Dictionary) -> void:
 	if Game.mod_level(&"momentum") > 0 and player.speed() > 9.0:
 		mult *= 1.0 + 0.2 * Game.mod_level(&"momentum")
 	Synth.play(d.sound, -3)
-	player.add_recoil(d.recoil)
+	var rk := 0.55 if player.aiming else 1.0
+	# deterministic horizontal pattern: drifts right then snakes, so it can be learned
+	var yaw_k: float = sin(shot_index * 0.9) * 0.6 + 0.4
+	player.add_recoil(d.recoil * rk, d.get("recoil_yaw", 0.3) * yaw_k * rk)
+	shot_index += 1
+	bloom_cur = minf(bloom_cur + float(d.bloom), 4.0)
 	kick = 1.0
 	_flash()
 	match d.kind:
 		"hitscan":
+			FX.casing(player, muzzle_pos() + player.camera.global_transform.basis.z * 0.12, player.camera.global_transform.basis.x)
+			if d.pellets > 1 or float(d.get("fire_interval", 0.0)) > 0.25:
+				FX.smoke(player, muzzle_pos(), Color(0.7, 0.7, 0.72, 0.35), 3, 0.18, 0.5)
 			var any_hit := false
 			for i in d.pellets:
-				if _hitscan(d.damage * mult, d.spread_deg, d.range, 1):
+				if _hitscan(d.damage * mult, current_spread(), d.range, int(d.get("pierce", 1))):
 					any_hit = true
 			if any_hit:
 				Game.stats.hits += 1
@@ -307,6 +400,7 @@ func _hitscan(damage: float, spread_deg: float, rng: float, pierce: int, width: 
 			exclude.append(c.get_rid())
 		else:
 			FX.spark(player, r.position + r.normal * 0.05, Color(1.0, 0.8, 0.5), 0.07, 0.1)
+			FX.impact(player, r.position, r.normal)
 			break
 	FX.tracer(player, muzzle_pos(), end, col, width)
 	return hit_enemy
@@ -328,8 +422,10 @@ func _animate(delta: float) -> void:
 	kick = move_toward(kick, 0.0, delta * 6.0)
 	var spd := player.speed()
 	var t := Time.get_ticks_msec() / 1000.0
-	var bob := Vector3(sin(t * 7.0) * 0.006, absf(cos(t * 7.0)) * 0.008, 0) * clampf(spd / 7.5, 0, 1.5)
-	var base := VM_POS
+	var bob := Vector3(sin(t * 7.0) * 0.006, absf(cos(t * 7.0)) * 0.008, 0) * clampf(spd / 7.5, 0, 1.5) * (1.0 - ads * 0.85)
+	# scoped weapons hide the model when fully aimed (HUD draws the scope)
+	m.visible = not (def().get("scope", false) and ads > 0.95)
+	var base := VM_POS.lerp(ADS_POS, ads)
 	if reloading > 0.0:
 		base += Vector3(0, -0.12, 0.05)
 	if switching > 0.0:
@@ -343,3 +439,10 @@ func _animate(delta: float) -> void:
 	m.position = m.position.lerp(base + bob + Vector3(0, 0, kick * 0.08) + charge_shake, clampf(delta * 18.0, 0, 1))
 	m.rotation.x = lerpf(m.rotation.x, kick * 0.25, clampf(delta * 18.0, 0, 1))
 	m.rotation.z = lerpf(m.rotation.z, -1.2 if retuning > 0.0 else 0.0, clampf(delta * 14.0, 0, 1))
+
+func current_spread() -> float:
+	var d := def()
+	var base: float = lerpf(float(d.spread_deg), float(d.ads_spread), ads)
+	var move_pen: float = clampf(player.speed() / 10.0, 0.0, 1.0) * (1.0 - ads) * 1.2
+	var air_pen: float = 0.0 if player.is_on_floor() else 1.5 * (1.0 - ads * 0.5)
+	return base + bloom_cur * (1.0 - ads * 0.6) + move_pen + air_pen

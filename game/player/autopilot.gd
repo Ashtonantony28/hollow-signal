@@ -67,9 +67,17 @@ func _physics_process(delta: float) -> void:
 			fire_toggle = not fire_toggle
 			player.ai_fire = fire_toggle if player.weapons.def().kind != "beam" else true
 		var dist := player.global_position.distance_to(target.global_position)
-		var want_w: StringName = &"rivet"
-		if dist < 9.0 and Game.ammo[&"scatter"].mag + Game.ammo[&"scatter"].reserve > 0:
-			want_w = &"scatter"
+		var want_w: StringName = Game.loadout[0] if not Game.loadout.is_empty() else &"rivet"
+		for id in Game.loadout:
+			var cls: String = WeaponData.get_def(id)["class"]
+			var a: Dictionary = Game.ammo[id]
+			if a.mag + maxi(a.reserve, 0) <= 0 and a.reserve >= 0:
+				continue
+			if dist < 9.0 and cls == "Shotgun":
+				want_w = id
+				break
+			if cls in ["Rifle", "SMG", "LMG"]:
+				want_w = id
 		if player.weapons.current != want_w:
 			player.weapons.equip(want_w)
 		if "shield" in target and target.shield > 0.0 and player.weapons.band != target.band:

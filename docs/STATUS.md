@@ -9,9 +9,25 @@
 - Rendering checked through software-GL screenshots (xvfb + llvmpipe).
 - Windows + Linux exports build in CI.
 
+## v0.3 movement + guns (2026-11-12, from owner playtest)
+
+- Movement: momentum slide (boost + friction decay), slide-hop keeps speed, mantle onto ledges up to 1.9 m,
+  wall-run (1.3 s, camera tilt) + wall-jump, double jump (thrusters), speed-based FOV.
+- Guns: 9 weapons (Rivet Driver, Hammer, Needle, Arc Carbine, Scattercoil, Longwire, Arc Lance, Pressure
+  Launcher, Hailstorm); ADS on all with sight alignment and FOV/sensitivity scaling; real-aim recoil with a
+  learnable pattern + auto-recovery; spread bloom, movement/air penalties; Longwire scope; Hailstorm spin-up.
+- Weapon wheel (hold Tab, slow-mo), 4-slot loadout, Armory with Salvage unlocks (persistent profile).
+- `--guns=DIR` gun gallery QA mode. 29 headless tests (new: mantle, double jump, slide momentum, wall-run).
+- Graphics: procedural PBR panel textures (albedo/normal/roughness) on walls, floors, ceilings; Quality
+  renderer tier (Forward+/Vulkan: SSAO, SSIL, volumetric fog, shadows, ACES) chosen in Settings via
+  override.cfg + restart, Fast (Compatibility) default. Cloud screenshots of Quality need mesa-vulkan-drivers
+  (lavapipe): `xvfb-run -a godot --path . --rendering-method forward_plus --rendering-driver vulkan -- --tour=DIR`.
+- FX: CPUParticles3D impact sparks, dust, bullet marks (80-quad ring buffer), casings, muzzle and death smoke.
+- Models: chamfered boxes for all primitive parts, viewmodel key light.
+
 ## Known gaps / next
 
 - Owner playtest feedback (feel, difficulty, performance on the target PC).
-- Visual variety: room props are boxes; add pipes, consoles, catwalks/ramps (DESIGN §6.2 step 7).
-- Enemy readability at range; damage direction indicator; gamepad look.
+- Enemy models are still primitive-based (CC0 art decision pending with the owner).
+- New enemies/hazards, boss rework, pickups with rarity (OVERHAUL.md).
 - Bot can't finish the boss reliably in time limits (fine for a human; consider boss HP tuning after playtest).

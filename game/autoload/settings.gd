@@ -31,6 +31,7 @@ const BINDINGS := {
 	"weapon_4": [KEY_4],
 	"pause": [KEY_ESCAPE, KEY_P],
 	"debug_overlay": [KEY_F3],
+	"weapon_wheel": [KEY_TAB],
 }
 const MOUSE_BINDINGS := {
 	"fire": MOUSE_BUTTON_LEFT,
@@ -95,6 +96,27 @@ func apply() -> void:
 		vp.scaling_3d_scale = clampf(render_scale, 0.4, 1.0)
 	var bus := AudioServer.get_bus_index("Master")
 	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(master_volume, 0.0001)))
+
+## Renderer tier: 0 = Fast (Compatibility/OpenGL), 1 = Quality (Forward+/Vulkan). Switching writes
+## override.cfg beside the executable (or project) and restarts, because Godot picks the renderer at boot.
+func current_tier() -> int:
+	return 1 if RenderingServer.get_rendering_device() != null else 0
+
+func override_path() -> String:
+	if OS.has_feature("editor") or not OS.has_feature("template"):
+		return ProjectSettings.globalize_path("res://override.cfg")
+	return OS.get_executable_path().get_base_dir().path_join("override.cfg")
+
+func set_tier_and_restart(tier: int) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(override_path())
+	var method := "forward_plus" if tier == 1 else "gl_compatibility"
+	cfg.set_value("rendering", "renderer/rendering_method", method)
+	cfg.set_value("rendering", "rendering_device/driver", "vulkan")
+	cfg.save(override_path())
+	save_settings()
+	OS.set_restart_on_exit(true, OS.get_cmdline_args())
+	get_tree().quit()
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()

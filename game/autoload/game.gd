@@ -16,6 +16,7 @@ var max_plating := 100.0
 var charge := 0.0
 var ammo: Dictionary = {}     # weapon id -> {mag, reserve}
 var mods: Dictionary = {}     # mod id -> stacks
+var loadout: Array[StringName] = []  # the 4 weapons carried this run
 
 # run statistics
 var stats := {"kills": 0, "shots": 0, "hits": 0, "damage_dealt": 0.0, "damage_taken": 0.0, "time": 0.0}
@@ -40,7 +41,8 @@ func new_run(seed_value: int = -1) -> void:
 	charge = 0.0
 	mods = {}
 	ammo = {}
-	for id in WeaponData.ORDER:
+	loadout = Profile.loadout.duplicate()
+	for id in WeaponData.ALL:
 		var d: Dictionary = WeaponData.get_def(id)
 		ammo[id] = {"mag": d.mag, "reserve": reserve_max(id) if d.reserve_max > 0 else -1}
 	stats = {"kills": 0, "shots": 0, "hits": 0, "damage_dealt": 0.0, "damage_taken": 0.0, "time": 0.0}
