@@ -1,0 +1,48 @@
+; Engine configuration file. Hand-maintained: Hollow Signal keeps all config in text.
+config_version=5
+
+[application]
+
+config/name="Hollow Signal"
+config/description="Code-first roguelite FPS in a procedurally generated derelict relay station."
+run/main_scene="res://game/main.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+run/max_fps=0
+boot_splash/bg_color=Color(0.03, 0.035, 0.05, 1)
+boot_splash/show_image=false
+
+[autoload]
+
+Events="*res://game/autoload/events.gd"
+Settings="*res://game/autoload/settings.gd"
+Synth="*res://game/autoload/synth.gd"
+Game="*res://game/autoload/game.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/aspect="expand"
+window/vsync/vsync_mode=1
+
+[physics]
+
+common/physics_ticks_per_second=60
+3d/physics_engine="DEFAULT"
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="player"
+3d_physics/layer_3="enemies"
+3d_physics/layer_4="pickups"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=0
+lights_and_shadows/directional_shadow/size=2048
+environment/defaults/default_clear_color=Color(0.02, 0.025, 0.035, 1)
+limits/opengl/max_lights_per_object=8
