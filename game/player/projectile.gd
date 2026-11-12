@@ -35,6 +35,7 @@ func _physics_process(delta: float) -> void:
 
 func explode(at: Vector3) -> void:
 	FX.explosion(self, at, radius, ThemeData.BAND_COLORS[band])
+	FX.smoke(self, at, Color(0.25, 0.25, 0.27, 0.6), 10, radius * 0.5, 1.4)
 	Synth.play_at(&"explosion", at, 2.0)
 	var hit_any := false
 	for e in get_tree().get_nodes_in_group("enemies") + get_tree().get_nodes_in_group("boss"):

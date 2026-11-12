@@ -335,6 +335,9 @@ func _fire(d: Dictionary) -> void:
 	_flash()
 	match d.kind:
 		"hitscan":
+			FX.casing(player, muzzle_pos() + player.camera.global_transform.basis.z * 0.12, player.camera.global_transform.basis.x)
+			if d.pellets > 1 or float(d.get("fire_interval", 0.0)) > 0.25:
+				FX.smoke(player, muzzle_pos(), Color(0.7, 0.7, 0.72, 0.35), 3, 0.18, 0.5)
 			var any_hit := false
 			for i in d.pellets:
 				if _hitscan(d.damage * mult, current_spread(), d.range, int(d.get("pierce", 1))):
@@ -388,6 +391,7 @@ func _hitscan(damage: float, spread_deg: float, rng: float, pierce: int, width: 
 			exclude.append(c.get_rid())
 		else:
 			FX.spark(player, r.position + r.normal * 0.05, Color(1.0, 0.8, 0.5), 0.07, 0.1)
+			FX.impact(player, r.position, r.normal)
 			break
 	FX.tracer(player, muzzle_pos(), end, col, width)
 	return hit_enemy

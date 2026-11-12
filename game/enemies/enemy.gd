@@ -243,6 +243,14 @@ func take_hit(amount: float, hit_band: int, pos: Vector3, dir: Vector3) -> void:
 					e._update_shield_visual()
 	else:
 		FX.spark(self, pos, Color(1.0, 0.4, 0.25) if weak else Color(1.0, 0.75, 0.4), 0.1)
+		var n: Vector3 = (pos - (global_position + Vector3.UP * def.height * 0.5)).normalized()
+		var sp := FX._burst(self, pos, FX.spark_mesh(), Meshes.mat(Color(1.0, 0.6, 0.3), 5.0, true), 6 if not weak else 12, 0.3)
+		sp.direction = n
+		sp.spread = 70.0
+		sp.initial_velocity_min = 2.0
+		sp.initial_velocity_max = 6.0
+		sp.gravity = Vector3(0, -12, 0)
+		sp.particle_flag_align_y = true
 	if r.broke:
 		Synth.play_at(&"shield_break", pos, 0)
 		FX.shards(self, global_position + Vector3.UP * def.height * 0.5, ThemeData.BAND_COLORS[band], 8)
@@ -303,6 +311,7 @@ func die() -> void:
 	Synth.play_at(&"kill", global_position, 0)
 	FX.shards(self, global_position + Vector3.UP * def.height * 0.5, Color(1.0, 0.5, 0.2), 10)
 	FX.explosion(self, global_position + Vector3.UP * def.height * 0.5, 0.8, Color(1.0, 0.55, 0.25))
+	FX.smoke(self, global_position + Vector3.UP * def.height * 0.5, Color(0.2, 0.2, 0.22, 0.6), 8, 0.6, 1.2)
 	Events.enemy_killed.emit(self)
 	if level and level.has_method("on_enemy_killed"):
 		level.on_enemy_killed(self)
