@@ -14,7 +14,7 @@ var hud: HUD
 var menus: Menus
 var args := {}
 var autopilot: Autopilot
-var shot_timer := 0.0
+var shot_timer := 2.0
 var shot_count := 0
 var run_time := 0.0
 var state := "menu"
@@ -196,6 +196,9 @@ func _report_and_quit() -> void:
 	var phase_name := "-"
 	if level and is_instance_valid(level) and not level.has_meta("backdrop"):
 		phase_name = Level.Phase.keys()[level.phase]
+	if level and is_instance_valid(level) and level.boss and is_instance_valid(level.boss):
+		var b = level.boss
+		print("[boss] phase=%d hp=%.0f/%.0f shield=%.0f nodes=%d dist=%.1f" % [b.phase, b.hp, b.max_hp, b.shield, b.nodes.size(), b.global_position.distance_to(level.player.global_position)])
 	print("[report] state=%s deck=%d phase=%s time=%.1f kills=%d shots=%d hits=%d integrity=%.0f dealt=%.0f taken=%.0f" % [
 		state, Game.deck_index, phase_name, Game.stats.time, Game.stats.kills, Game.stats.shots, Game.stats.hits,
 		Game.integrity, Game.stats.damage_dealt, Game.stats.damage_taken])

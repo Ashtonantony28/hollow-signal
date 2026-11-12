@@ -82,5 +82,8 @@ func _think(delta: float) -> Vector3:
 	if d < def.attack_range and cooldown <= 0.0:
 		cooldown = def.cooldown
 		player.take_damage(def.damage * 0.6, global_position)
+		var push := player.global_position - global_position
+		push.y = 0
+		player.knockback(push.normalized() * 9.0 + Vector3.UP * 2.5)
 		Synth.play_at(&"tick_bite", global_position, 2, 0.5)
 	return seek(player.global_position, def.speed, delta)

@@ -15,6 +15,7 @@ var strafe := 1.0
 var strafe_t := 0.0
 var target: Node3D = null
 var scan_t := 0.0
+var fire_toggle := false
 
 func _physics_process(delta: float) -> void:
 	if player == null or level == null or not player.alive:
@@ -25,6 +26,8 @@ func _physics_process(delta: float) -> void:
 		scan_t = 0.15
 		target = _pick_target()
 	var goal := level.objective_position()
+	if OS.has_feature("debug") and Engine.get_physics_frames() % 600 == 0 and OS.get_cmdline_user_args().has("--botlog"):
+		print("[bot] pos=%s goal=%s path=%d/%d target=%s phase=%s" % [player.global_position.snapped(Vector3.ONE), goal.snapped(Vector3.ONE), path_idx, path.size(), _desc(target), Level.Phase.keys()[level.phase]])
 	if level.phase == Level.Phase.DONE:
 		player.ai_move = Vector2.ZERO
 		player.ai_fire = false
@@ -59,8 +62,10 @@ func _physics_process(delta: float) -> void:
 		var aim_at: Vector3 = target.global_position + Vector3.UP * aim_h
 		player.look_at_point(aim_at, 0.3)
 		var to_t: Vector3 = (aim_at - player.eye_position()).normalized()
-		if player.aim_dir().dot(to_t) > 0.985:
-			player.ai_fire = not player.ai_fire if player.weapons.def().kind == "hitscan" else true
+		if player.aim_dir().dot(to_t) > 0.97:
+			# semi-auto weapons need press/release cycles; the Lance is held to charge
+			fire_toggle = not fire_toggle
+			player.ai_fire = fire_toggle if player.weapons.def().kind != "beam" else true
 		var dist := player.global_position.distance_to(target.global_position)
 		var want_w: StringName = &"rivet"
 		if dist < 9.0 and Game.ammo[&"scatter"].mag + Game.ammo[&"scatter"].reserve > 0:
@@ -74,6 +79,11 @@ func _physics_process(delta: float) -> void:
 			strafe_t = randf_range(0.6, 1.5)
 			strafe = -strafe
 		move_world += player.global_transform.basis.x * strafe * 0.6
+		# Bulwark: its barrier blocks frontal fire — Pulse it or circle to its flank
+		if target is Bulwark and _in_front_of(target as Bulwark):
+			if Game.charge >= Game.pulse_cost() and dist < Player.PULSE_RADIUS:
+				player.try_pulse()
+			move_world = player.global_transform.basis.x * strafe * 1.0 - (target.global_position - player.global_position).normalized() * (0.6 if dist < 5.0 else 0.0)
 		var close := 0
 		for e in get_tree().get_nodes_in_group("enemies"):
 			if e.global_position.distance_to(player.global_position) < 8.0:
@@ -105,8 +115,15 @@ func _pick_target() -> Node3D:
 	for e in cands:
 		if not is_instance_valid(e) or not e.is_inside_tree():
 			continue
+		# the Conductor's core is sealed while shield nodes live: target the nodes
+		if e is Conductor and not (e as Conductor).nodes.is_empty():
+			continue
 		var p: Vector3 = e.global_position + Vector3.UP * 0.6
 		var d := player.eye_position().distance_to(p)
+		if e is ConductorNode:
+			d *= 0.3
+		elif e is Bulwark and _in_front_of(e as Bulwark):
+			d *= 2.5
 		if d >= bd:
 			continue
 		var q := PhysicsRayQueryParameters3D.create(player.eye_position(), p, 1)
@@ -114,3 +131,18 @@ func _pick_target() -> Node3D:
 			bd = d
 			best = e
 	return best
+
+func _desc(t: Node3D) -> String:
+	if t == null or not is_instance_valid(t):
+		return "none"
+	if t is Enemy:
+		var e := t as Enemy
+		return "%s hp=%.0f sh=%.0f st=%d at=%s d=%.1f aimdot=%.3f" % [e.kind, e.hp, e.shield, e.state, e.global_position.snapped(Vector3.ONE * 0.1), e.global_position.distance_to(player.global_position), player.aim_dir().dot((e.global_position + Vector3.UP * float(e.def.height) * 0.6 - player.eye_position()).normalized())]
+	return t.get_class()
+
+func _in_front_of(b: Bulwark) -> bool:
+	if b.state == Enemy.State.STAGGER:
+		return false
+	var to := player.global_position - b.global_position
+	to.y = 0
+	return to.normalized().dot(b.forward()) > 0.35

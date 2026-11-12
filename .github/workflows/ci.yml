@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  GODOT_VERSION: 4.3
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot + export templates
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-stable
+
+      - name: Install Godot ${{ env.GODOT_VERSION }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          cd ~/godot
+          curl -sSL -o g.zip https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q g.zip && mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot && rm g.zip
+          curl -sSL -o t.tpz https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          unzip -q t.tpz
+          mv templates/windows_release_x86_64.exe templates/windows_debug_x86_64.exe \
+             templates/windows_release_x86_64_console.exe templates/windows_debug_x86_64_console.exe \
+             templates/linux_release.x86_64 templates/linux_debug.x86_64 templates/version.txt \
+             ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
+          rm -rf templates t.tpz
+
+      - name: Tests (unit + deck invariants + bot smoke)
+        env:
+          GODOT: ~/godot/godot
+        run: GODOT=$HOME/godot/godot tools/test.sh
+
+      - name: Bot playthrough (god mode, 2 decks)
+        run: |
+          timeout 600 $HOME/godot/godot --headless --path . -- --autoplay --god --seed=7 --quit-after=120 --timescale=4 2>&1 | grep -E "^\[|SCRIPT ERROR" | tee bot.log
+          ! grep -q "SCRIPT ERROR" bot.log
+          grep -q "\[deck\] completed 0" bot.log
+
+      - name: Export Windows + Linux
+        run: |
+          mkdir -p build/windows build/linux
+          $HOME/godot/godot --headless --path . --export-release "Windows" build/windows/HollowSignal.exe
+          $HOME/godot/godot --headless --path . --export-release "Linux" build/linux/HollowSignal.x86_64
+          ls -la build/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HollowSignal-windows
+          path: build/windows/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HollowSignal-linux
+          path: build/linux/

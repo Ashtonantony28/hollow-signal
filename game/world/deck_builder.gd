@@ -44,8 +44,16 @@ static func build(layout: Dictionary, quality: int = 1) -> Node3D:
 				fcol = fcol.lightened(0.04)
 			fcol.a = 1.0
 			Meshes.quad(st, Vector3(x0, 0, z0), Vector3(x1, 0, z0), Vector3(x1, 0, z1), Vector3(x0, 0, z1), fcol)
-			var ccol: Color = (theme.wall as Color).darkened(0.45)
+			var ccol: Color = (theme.wall as Color).darkened(0.3)
 			Meshes.quad(st, Vector3(x0, ch, z0), Vector3(x0, ch, z1), Vector3(x1, ch, z1), Vector3(x1, ch, z0), ccol)
+			if is_corr and (x + y) % 3 == 0:
+				if not trims.has(ck):
+					var tsc := SurfaceTool.new()
+					tsc.begin(Mesh.PRIMITIVE_TRIANGLES)
+					trims[ck] = tsc
+				var lc: Color = theme.light
+				var y2 := ch - 0.02
+				Meshes.quad(trims[ck], Vector3(x0 + 1.4, y2, z0 + 1.4), Vector3(x0 + 1.4, y2, z1 - 1.4), Vector3(x1 - 1.4, y2, z1 - 1.4), Vector3(x1 - 1.4, y2, z0 + 1.4), lc)
 			for d in DIRS:
 				var nx: int = x + d.x
 				var ny: int = y + d.y
@@ -94,7 +102,9 @@ static func build(layout: Dictionary, quality: int = 1) -> Node3D:
 		shape.set_faces(arrays[Mesh.ARRAY_VERTEX])
 		cs.shape = shape
 		body.add_child(cs)
-	var trim_mat := Meshes.mat(theme.trim, 2.5, true)
+	var trim_mat := StandardMaterial3D.new()
+	trim_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	trim_mat.vertex_color_use_as_albedo = true
 	for ck in trims:
 		var tm := MeshInstance3D.new()
 		tm.mesh = (trims[ck] as SurfaceTool).commit()
@@ -202,8 +212,8 @@ static func _build_lights(root: Node3D, layout: Dictionary, theme: Dictionary, q
 			var l := OmniLight3D.new()
 			l.position = pos
 			l.light_color = theme.light
-			l.light_energy = 1.6
-			l.omni_range = span * (0.75 if positions.size() == 1 else 0.6) + 4.0
+			l.light_energy = 2.2
+			l.omni_range = span * (0.85 if positions.size() == 1 else 0.7) + 6.0
 			l.omni_attenuation = 0.8
 			l.shadow_enabled = false
 			lights.add_child(l)
@@ -219,12 +229,12 @@ static func make_environment(theme: Dictionary, quality: int) -> WorldEnvironmen
 	env.background_color = theme.fog
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = theme.ambient
-	env.ambient_light_energy = 0.75
+	env.ambient_light_energy = 1.35
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.1
+	env.tonemap_exposure = 1.25
 	env.fog_enabled = true
 	env.fog_light_color = theme.fog
-	env.fog_density = 0.018
+	env.fog_density = 0.012
 	env.glow_enabled = quality >= 1
 	env.glow_intensity = 0.6
 	env.glow_bloom = 0.05

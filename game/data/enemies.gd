@@ -2,7 +2,7 @@ class_name EnemyData
 ## Balance table for the Choir (DESIGN.md §5).
 
 const DEFS := {
-	&"tick": {"hp": 30.0, "shield": 0.0, "speed": 8.5, "damage": 9.0, "attack_range": 2.2,
+	&"tick": {"hp": 30.0, "shield": 0.0, "speed": 8.0, "damage": 7.0, "attack_range": 2.2,
 		"cost": 1, "radius": 0.45, "height": 0.8, "weak_offset": Vector3(0, 0.55, -0.3), "weak_radius": 0.25,
 		"drop_chance": 0.12},
 	&"warden": {"hp": 80.0, "shield": 40.0, "speed": 4.5, "damage": 11.0, "attack_range": 26.0,

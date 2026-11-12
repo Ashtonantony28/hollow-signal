@@ -39,7 +39,7 @@ func _think(delta: float) -> Vector3:
 	var flat := Vector3(target.x - global_position.x, 0, target.z - global_position.z)
 	var d := flat.length()
 	if d < 1.4 and bite_cd <= 0.0 and absf(target.y - global_position.y) < 1.5:
-		bite_cd = 0.9
+		bite_cd = 1.1
 		player.take_damage(def.damage, global_position)
 		Synth.play_at(&"tick_bite", global_position, -2)
 	if d < 4.0 and d > 1.6 and leap_cd <= 0.0 and is_on_floor() and can_see:

@@ -1,17 +1,17 @@
-# Status — paused 2026-11-12 (owner paused all threads)
+# Status
 
-Done:
-- Design doc (docs/DESIGN.md), Godot 4.3 Compatibility project, all code-generated.
-- Deck generator + builder + grid nav; 18 headless tests pass (`tools/test.sh`), 600 seeds validated.
-- Player controller, 4 weapons, bands, Pulse; 5 enemy types + Conductor boss; director; core → uplink → lift loop;
-  HUD, menus, Patch Bay mods, procedural audio, autopilot bot.
-- `tools/check.sh` parses all scripts cleanly.
+## v0.1 playable (2026-11-12)
 
-In progress / next:
-1. Autoplay smoke run (`godot --headless --path . -- --autoplay --god --seed=7 --quit-after=150 --timescale=4`)
-   boots and plays; bot fires too rarely (aim threshold / fire toggle in game/player/autopilot.gd) — tune, then
-   confirm a full deck completes.
-2. Silence headless dummy-renderer "Parameter m is null" noise in logs (harmless) or filter it in scripts.
-3. Screenshots via xvfb-run (mesa llvmpipe available) to check visuals/winding.
-4. CI workflow (.github/workflows/ci.yml): tests + Windows/Linux export; export_presets.cfg.
-5. Windows build to the owner's PC for playtest.
+- Full run loop: 5 procedural decks (Intake, Cisterns, Foundry, Archive, Spire) → Conductor boss.
+- 4 weapons, band retuning, Pulse; Tick, Warden, Lobber, Shrieker, Bulwark; director pacing; Patch Bay mods.
+- Cloud verification: 23 headless tests (unit, 600-seed deck invariants, enemy/boss tests, bot smoke test).
+  A god-mode bot clears decks 1–4 and reaches the boss; a non-god bot clears deck 1 and usually dies on deck 2–3.
+- Rendering checked through software-GL screenshots (xvfb + llvmpipe).
+- Windows + Linux exports build in CI.
+
+## Known gaps / next
+
+- Owner playtest feedback (feel, difficulty, performance on the target PC).
+- Visual variety: room props are boxes; add pipes, consoles, catwalks/ramps (DESIGN §6.2 step 7).
+- Enemy readability at range; damage direction indicator; gamepad look.
+- Bot can't finish the boss reliably in time limits (fine for a human; consider boss HP tuning after playtest).

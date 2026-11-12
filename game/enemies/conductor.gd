@@ -168,7 +168,7 @@ func _enter_phase(p: int) -> void:
 		for i in 3:
 			var body := ConductorNode.new()
 			body.boss = self
-			body.node_band = i
+			body.band = i
 			add_child(body)
 			nodes.append({"body": body})
 	elif p == 3:

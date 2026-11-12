@@ -3,6 +3,7 @@ extends Node3D
 ## Weapons, bands, viewmodels (DESIGN.md §3.4, §4). Child of the player camera.
 
 const RAY_MASK := 1 | 4
+const VM_POS := Vector3(0.17, -0.16, -0.4)
 
 var player: Player
 var current: StringName = &"rivet"
@@ -45,9 +46,10 @@ func _ready() -> void:
 
 func _build_model(id: StringName) -> Node3D:
 	var root := Node3D.new()
-	root.position = Vector3(0.22, -0.2, -0.42)
-	var body_col := Color(0.18, 0.19, 0.22)
-	var metal := Color(0.32, 0.33, 0.37)
+	root.position = VM_POS
+	root.scale = Vector3.ONE * 0.72
+	var body_col := Color(0.30, 0.31, 0.35)
+	var metal := Color(0.45, 0.46, 0.5)
 	match id:
 		&"rivet":
 			_part(root, Meshes.box(Vector3(0.07, 0.09, 0.3), body_col), Vector3(0, 0, 0))
@@ -77,6 +79,13 @@ func _build_model(id: StringName) -> Node3D:
 	for c in root.get_children():
 		if c is GeometryInstance3D:
 			c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			# faint self-illumination so the weapon reads in dark corridors
+			if c is MeshInstance3D and not (c in accents):
+				var m := (c.material_override as StandardMaterial3D).duplicate() as StandardMaterial3D
+				m.emission_enabled = true
+				m.emission = m.albedo_color
+				m.emission_energy_multiplier = 0.35
+				c.material_override = m
 	return root
 
 func _part(root: Node3D, mi: MeshInstance3D, pos: Vector3, rot_deg: Vector3 = Vector3.ZERO) -> void:
@@ -90,7 +99,7 @@ func _accent(root: Node3D, mi: MeshInstance3D, pos: Vector3, rot_deg: Vector3 = 
 
 func muzzle_pos() -> Vector3:
 	var m: Node3D = models[current]
-	return m.global_transform * Vector3(0, 0.01, -0.5)
+	return m.global_transform * Vector3(0, 0.01, -0.45)
 
 # ---------------------------------------------------------------- state
 
@@ -113,7 +122,7 @@ func set_band(b: int, silent: bool = false) -> void:
 	band = posmod(b, 3)
 	var col: Color = ThemeData.BAND_COLORS[band]
 	for a in accents:
-		a.material_override = Meshes.mat(col, 3.0, true)
+		a.material_override = Meshes.mat(col.darkened(0.15), 1.0, true)
 	if not silent:
 		retuning = Game.retune_time()
 		retune_bonus = Game.mod_level(&"quick_tuner") > 0
@@ -320,7 +329,7 @@ func _animate(delta: float) -> void:
 	var spd := player.speed()
 	var t := Time.get_ticks_msec() / 1000.0
 	var bob := Vector3(sin(t * 7.0) * 0.006, absf(cos(t * 7.0)) * 0.008, 0) * clampf(spd / 7.5, 0, 1.5)
-	var base := Vector3(0.22, -0.2, -0.42)
+	var base := VM_POS
 	if reloading > 0.0:
 		base += Vector3(0, -0.12, 0.05)
 	if switching > 0.0:

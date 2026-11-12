@@ -27,6 +27,16 @@ var hit_timer := 0.0
 var debug := false
 var cross_parts: Array[ColorRect] = []
 
+## Edge-only damage vignette: alpha rises toward the screen border, centre stays clear.
+const VIGNETTE_SHADER := """
+shader_type canvas_item;
+void fragment() {
+	vec2 d = UV - vec2(0.5);
+	float edge = smoothstep(0.25, 0.75, length(d * vec2(1.2, 1.0)));
+	COLOR = vec4(COLOR.rgb, COLOR.a * edge * 1.6);
+}
+"""
+
 func _ready() -> void:
 	layer = 5
 	var root := Control.new()
@@ -37,6 +47,11 @@ func _ready() -> void:
 	vignette = ColorRect.new()
 	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vignette.color = Color(0.8, 0.05, 0.05, 0.0)
+	var sh := Shader.new()
+	sh.code = VIGNETTE_SHADER
+	var sm := ShaderMaterial.new()
+	sm.shader = sh
+	vignette.material = sm
 	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(vignette)
 
