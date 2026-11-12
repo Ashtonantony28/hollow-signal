@@ -217,6 +217,7 @@ func _physics_process(delta: float) -> void:
 	if not ai_controlled:
 		if Input.is_action_just_pressed("pulse"):
 			try_pulse()
+		_pad_look(delta)
 	_update_camera(delta, inp, sprinting)
 
 func _set_crouch(c: bool, delta: float) -> void:
@@ -339,3 +340,15 @@ func try_pulse() -> bool:
 			e.reveal(6.0)
 	Events.pulse_fired.emit(global_position)
 	return true
+
+const PAD_DEADZONE := 0.15
+const PAD_LOOK_SPEED := 3.2  # rad/s at full deflection and default sensitivity
+
+func _pad_look(delta: float) -> void:
+	var v := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
+	if v.length() < PAD_DEADZONE:
+		return
+	v = v.normalized() * inverse_lerp(PAD_DEADZONE, 1.0, minf(v.length(), 1.0))
+	v *= v.length()  # response curve: fine aim near centre
+	var k := PAD_LOOK_SPEED * delta * (Settings.mouse_sensitivity / 0.0025)
+	rotate_look(-v.x * k, -v.y * k)

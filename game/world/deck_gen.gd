@@ -9,6 +9,7 @@ const FLOOR := 1
 const H_CORRIDOR := 4.0
 const H_ROOM := 6.0
 const H_ARENA := 9.0
+const PLATFORM_H := 2.0
 
 ## Generates a valid layout. Retries with derived seeds until all invariants hold.
 static func generate(seed_value: int, deck_index: int) -> Dictionary:
@@ -160,6 +161,48 @@ static func _try_generate(s: int, deck_index: int) -> Dictionary:
 	var blocked := PackedByteArray()
 	blocked.resize(w * h)
 	var props: Array = []
+	# 5a. Verticality: a raised dais with a ramp along one wall of big rooms (DESIGN §6.2.7).
+	var platforms: Array = []
+	for i in n:
+		if not (types[i] in [&"arena", &"boss", &"uplink"]):
+			continue
+		var pr := rects[i]
+		if mini(pr.size.x, pr.size.y) < 6:
+			continue
+		var side := rng.randi_range(0, 3)
+		var row: Array[Vector2i] = []
+		var dir := Vector2i.ZERO   # direction the row runs (ramp descends along it)
+		match side:
+			0:
+				for x in range(pr.position.x + 1, pr.end.x - 1): row.append(Vector2i(x, pr.position.y))
+				dir = Vector2i(1, 0)
+			1:
+				for x in range(pr.position.x + 1, pr.end.x - 1): row.append(Vector2i(x, pr.end.y - 1))
+				dir = Vector2i(1, 0)
+			2:
+				for y in range(pr.position.y + 1, pr.end.y - 1): row.append(Vector2i(pr.position.x, y))
+				dir = Vector2i(0, 1)
+			_:
+				for y in range(pr.position.y + 1, pr.end.y - 1): row.append(Vector2i(pr.end.x - 1, y))
+				dir = Vector2i(0, 1)
+		if row.size() < 5:
+			continue
+		var ok := true
+		for c in row:
+			if _near_doorway(cells, room_id, w, h, c.x, c.y, i) or c == centers[i]:
+				ok = false
+				break
+		if not ok:
+			continue
+		if rng.randf() < 0.5:
+			row.reverse()
+			dir = -dir
+		# last two cells of the row are the ramp, rising toward the dais
+		var dais: Array[Vector2i] = row.slice(0, row.size() - 2)
+		var ramp: Array[Vector2i] = row.slice(row.size() - 2)
+		for c in row:
+			blocked[c.y * w + c.x] = 1
+		platforms.append({"room": i, "dais": dais, "ramp": ramp, "dir": dir, "height": PLATFORM_H})
 	for i in n:
 		var t := types[i]
 		var density := 0.0
@@ -176,7 +219,7 @@ static func _try_generate(s: int, deck_index: int) -> Dictionary:
 				var c := Vector2i(x, y)
 				if c == centers[i] or (c - centers[i]).length_squared() <= 1:
 					continue
-				if _near_doorway(cells, room_id, w, h, x, y, i):
+				if _near_doorway(cells, room_id, w, h, x, y, i) or blocked[y * w + x] == 1:
 					continue
 				if rng.randf() < density:
 					var kind := &"crate"
@@ -202,7 +245,7 @@ static func _try_generate(s: int, deck_index: int) -> Dictionary:
 
 	return {
 		"w": w, "h": h, "cells": cells, "room_id": room_id, "ceil": ceil_h, "blocked": blocked,
-		"rooms": rooms, "edges": edges, "props": props, "deck": deck_index,
+		"rooms": rooms, "edges": edges, "props": props, "deck": deck_index, "platforms": platforms,
 		"start": start, "lift": lift, "vault": vault, "uplink": uplink, "boss": is_boss,
 	}
 

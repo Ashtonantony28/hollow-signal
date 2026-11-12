@@ -96,3 +96,30 @@ func test_synth_bank_complete() -> void:
 	for k in Synth.RECIPES:
 		check(Synth.bank.has(k), "missing sound %s" % k)
 		check((Synth.bank[k] as AudioStreamWAV).data.size() > 100, "empty sound %s" % k)
+
+func test_player_can_climb_ramp_onto_dais() -> void:
+	var l: Dictionary = {}
+	var seed_used := 0
+	for s in 200:
+		l = DeckGen.generate(s + 1, 2)
+		if not l.platforms.is_empty():
+			seed_used = s + 1
+			break
+	check(not l.platforms.is_empty(), "no platform found")
+	Game.new_run(1)
+	Game.deck_index = 2
+	var level := Level.new(2, seed_used)
+	get_tree().root.add_child(level)
+	level.director.enabled = false
+	await frames(2)
+	var pl: Dictionary = level.layout.platforms[0]
+	var dir := Vector3(pl.dir.x, 0, pl.dir.y)
+	var p := level.player
+	p.global_position = DeckGen.cell_to_world(pl.ramp[1]) + dir * 1.0 + Vector3.UP * 0.2
+	p.rotation.y = atan2(dir.x, dir.z)  # face back toward the dais (-dir)
+	p.ai_controlled = true
+	p.ai_move = Vector2(0, 1)
+	await frames(150)
+	check(p.global_position.y > pl.height - 0.2, "player did not reach dais top: y=%.2f" % p.global_position.y)
+	level.queue_free()
+	await frames(2)

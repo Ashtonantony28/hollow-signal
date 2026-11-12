@@ -74,3 +74,15 @@ func test_builder_produces_geometry_and_collision() -> void:
 	check(tris < 150000, "triangle budget exceeded: %d" % tris)
 	check(root.get_node("WorldBody").get_child_count() > 0, "no world collision")
 	root.free()
+
+func test_platforms_generated_and_blocked_for_nav() -> void:
+	var total := 0
+	for s in 40:
+		var l := DeckGen.generate(s + 300, s % 5)
+		for pl in l.platforms:
+			total += 1
+			check(pl.dais.size() >= 3, "dais too short")
+			eq(pl.ramp.size(), 2, "ramp cells")
+			for c in pl.dais + pl.ramp:
+				check(not DeckGen.is_walkable(l, c), "platform cell walkable for nav")
+	check(total >= 10, "only %d platforms in 40 decks" % total)
