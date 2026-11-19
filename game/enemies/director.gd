@@ -10,6 +10,7 @@ const SPAWN_SCRIPTS := {
 	&"lobber": preload("res://game/enemies/lobber.gd"),
 	&"shrieker": preload("res://game/enemies/shrieker.gd"),
 	&"bulwark": preload("res://game/enemies/bulwark.gd"),
+	&"lamplighter": preload("res://game/enemies/lamplighter.gd"),
 }
 
 var level: Node

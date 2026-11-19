@@ -17,10 +17,13 @@ const DEFS := {
 	&"bulwark": {"hp": 300.0, "shield": 150.0, "speed": 2.8, "damage": 30.0, "attack_range": 3.2,
 		"cost": 7, "radius": 0.9, "height": 2.4, "weak_offset": Vector3(0, 1.9, 0.6), "weak_radius": 0.35,
 		"drop_chance": 0.9, "cooldown": 2.5, "frontal": true},
+	&"lamplighter": {"hp": 70.0, "shield": 30.0, "speed": 3.5, "damage": 30.0, "attack_range": 48.0,
+		"cost": 4, "radius": 0.45, "height": 2.6, "weak_offset": Vector3(0, 2.46, -0.2), "weak_radius": 0.24,
+		"drop_chance": 0.5, "telegraph": 1.5, "cooldown": 3.5},
 }
 
 ## Unlock deck (0-based) for each archetype; the director only spawns unlocked types.
-const UNLOCK := {&"tick": 0, &"warden": 0, &"lobber": 1, &"shrieker": 2, &"bulwark": 3}
+const UNLOCK := {&"tick": 0, &"warden": 0, &"lobber": 1, &"shrieker": 2, &"bulwark": 3, &"lamplighter": 1}
 
 static func get_def(id: StringName) -> Dictionary:
 	return DEFS[id]

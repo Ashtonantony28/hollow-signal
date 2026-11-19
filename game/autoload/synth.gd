@@ -42,6 +42,9 @@ const RECIPES := {
 	"uplink_tick": {"dur": 0.15, "kind": "tone", "freq": 740.0, "noise": 0.0, "decay": 20.0},
 	"objective": {"dur": 0.7, "kind": "arp", "freq": 440.0, "noise": 0.0, "decay": 3.0},
 	"lift": {"dur": 1.2, "kind": "sweep", "freq": 200.0, "noise": 0.3, "decay": 1.5},
+	"steam": {"dur": 1.0, "kind": "boom", "freq": 900.0, "noise": 1.0, "decay": 2.0},
+	"zap_floor": {"dur": 0.3, "kind": "zap", "freq": 120.0, "noise": 0.8, "decay": 6.0},
+	"sniper": {"dur": 0.5, "kind": "zap", "freq": 180.0, "noise": 0.7, "decay": 9.0},
 	"death": {"dur": 1.4, "kind": "boom", "freq": 40.0, "noise": 0.8, "decay": 2.5},
 }
 

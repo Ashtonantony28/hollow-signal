@@ -47,6 +47,7 @@ func _ready() -> void:
 	holdout_total = 45.0 + 6.0 * deck_index
 	_build_objectives()
 	_place_caches()
+	_place_hazards()
 	player = Player.new()
 	player.level = self
 	add_child(player)
@@ -137,6 +138,32 @@ func _place_caches() -> void:
 				break
 			var c: Vector2i = room.spawns[r.randi_range(0, room.spawns.size() - 1)]
 			spawn_pickup(kinds[r.randi_range(0, kinds.size() - 1)], DeckGen.cell_to_world(c))
+		# Tuning Kits: one guaranteed in each vault, sometimes in caches
+		if (room.type == &"vault" or (room.type == &"cache" and r.randf() < 0.35)) and not room.spawns.is_empty():
+			spawn_pickup(&"tuning", DeckGen.cell_to_world(room.spawns[r.randi_range(0, room.spawns.size() - 1)]))
+
+func _place_hazards() -> void:
+	var hr := RandomNumberGenerator.new()
+	hr.seed = seed_value + 17
+	for hz in layout.get("hazards", []):
+		var node: Node3D
+		match hz.kind:
+			&"canister": node = Canister.new()
+			&"vent": node = SteamVent.new()
+			&"shock": node = ShockFloor.new()
+		if node == null:
+			continue
+		add_child(node)
+		var pos := DeckGen.cell_to_world(hz.cell)
+		if hz.kind == &"canister":
+			# cluster of 1-3 barrels, offset inside the cell
+			node.global_position = pos + Vector3(hr.randf_range(-1, 1), 0, hr.randf_range(-1, 1))
+			for k in hr.randi_range(0, 2):
+				var extra := Canister.new()
+				add_child(extra)
+				extra.global_position = node.global_position + Vector3.FORWARD.rotated(Vector3.UP, hr.randf() * TAU) * 0.85
+		else:
+			node.global_position = pos
 
 func spawn_pickup(kind: StringName, pos: Vector3) -> void:
 	var p := Pickup.new()
@@ -251,6 +278,8 @@ func _flat_dist(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
 
 func on_enemy_killed(e: Enemy) -> void:
+	if (e.elite or e.kind == &"bulwark") and drop_rng.randf() < 0.3:
+		spawn_pickup(&"tuning", e.global_position + Vector3(0.6, 0, 0))
 	var chance: float = e.def.drop_chance + 0.15 * Game.mod_level(&"reclaimer")
 	if drop_rng.randf() < chance:
 		var kinds: Array[StringName] = [&"ammo", &"ammo", &"repair", &"plating", &"charge"]

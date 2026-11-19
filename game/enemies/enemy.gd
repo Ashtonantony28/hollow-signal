@@ -33,6 +33,10 @@ var stagger_timer := 0.0
 var reveal_timer := 0.0
 var flash_timer := 0.0
 var elite := false
+var weak_accum := 0.0        # recent weak-point damage, decays; crossing a threshold staggers
+var _flash_meshes: Array = []
+var _flash_on := false
+static var _flash_mat: StandardMaterial3D
 var flying := false
 var _rng := RandomNumberGenerator.new()
 
@@ -81,6 +85,7 @@ func _ready() -> void:
 		visual.add_child(shield_mesh)
 	if elite:
 		visual.scale = Vector3.ONE * 1.2
+	_collect_flash_meshes(visual)
 	player = get_tree().get_first_node_in_group("player") as Player
 	perceive_timer = _rng.randf() / PERCEPTION_HZ
 	path_timer = _rng.randf() * PATH_REFRESH
@@ -101,6 +106,8 @@ func _physics_process(delta: float) -> void:
 		if player == null:
 			return
 	flash_timer = maxf(flash_timer - delta, 0.0)
+	weak_accum = maxf(weak_accum - max_hp * 0.15 * delta, 0.0)
+	_set_flash(flash_timer > 0.06)
 	visual.scale = Vector3.ONE * (1.2 if elite else 1.0) * (1.0 + flash_timer * 0.6)
 	if reveal_timer > 0.0:
 		reveal_timer -= delta
@@ -234,6 +241,15 @@ func take_hit(amount: float, hit_band: int, pos: Vector3, dir: Vector3) -> void:
 	if player:
 		player.add_charge((r.shield_damage + r.hp_damage) * 0.12)
 	flash_timer = 0.12
+	# hit reaction: small shove, and staggers when weak-point damage piles up fast
+	if not flying and kind != &"bulwark":
+		velocity += Vector3(dir.x, 0, dir.z).normalized() * minf(amount * 0.08, 2.5)
+	if weak and r.hp_damage > 0.0 and staggerable():
+		weak_accum += r.hp_damage
+		if weak_accum >= max_hp * 0.3:
+			weak_accum = 0.0
+			stagger(0.6)
+			Events.message.emit("STAGGERED", 0.6)
 	if had_shield:
 		FX.spark(self, pos, ThemeData.BAND_COLORS[band], 0.1 if not r.matched else 0.2)
 		if r.matched and Game.mod_level(&"harmonic") > 0:
@@ -258,6 +274,29 @@ func take_hit(amount: float, hit_band: int, pos: Vector3, dir: Vector3) -> void:
 	Events.enemy_hit.emit(self, r.shield_damage + r.hp_damage, weak, had_shield, r.matched)
 	if hp <= 0.0:
 		die()
+
+## Override to opt out (bosses, very small enemies).
+func staggerable() -> bool:
+	return kind != &"tick"
+
+func _collect_flash_meshes(n: Node) -> void:
+	for c in n.get_children():
+		if c is MeshInstance3D and c != shield_mesh:
+			_flash_meshes.append(c)
+		_collect_flash_meshes(c)
+
+func _set_flash(on: bool) -> void:
+	if on == _flash_on:
+		return
+	_flash_on = on
+	if _flash_mat == null:
+		_flash_mat = StandardMaterial3D.new()
+		_flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_flash_mat.albedo_color = Color(1, 1, 1, 0.55)
+		_flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	for m in _flash_meshes:
+		if is_instance_valid(m):
+			(m as MeshInstance3D).material_overlay = _flash_mat if on else null
 
 func _update_shield_visual() -> void:
 	if shield_mesh:
@@ -315,9 +354,39 @@ func die() -> void:
 	Events.enemy_killed.emit(self)
 	if level and level.has_method("on_enemy_killed"):
 		level.on_enemy_killed(self)
-	var tw := create_tween()
-	tw.tween_property(visual, "scale", Vector3(1.2, 0.05, 1.2), 0.18)
-	tw.tween_callback(queue_free)
+	_set_flash(false)
+	_break_apart()
+	queue_free()
+
+## Death: every visual part flies off as debris, tumbles and shrinks away.
+func _break_apart() -> void:
+	var root := get_tree().current_scene if get_tree().current_scene else get_parent()
+	var centre := global_position + Vector3.UP * float(def.height) * 0.5
+	var floor_y := global_position.y + 0.06
+	for m in _flash_meshes:
+		if not is_instance_valid(m) or not (m as Node3D).is_visible_in_tree():
+			continue
+		var mi := m as MeshInstance3D
+		var xf := mi.global_transform
+		mi.get_parent().remove_child(mi)
+		root.add_child(mi)
+		mi.global_transform = xf
+		var out := (xf.origin - centre)
+		out = (out.normalized() if out.length() > 0.05 else Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized())
+		var vel := out * randf_range(2.5, 5.5) + Vector3.UP * randf_range(2.0, 5.0)
+		var spin := Vector3(randf_range(-12, 12), randf_range(-12, 12), randf_range(-12, 12))
+		var life := randf_range(0.7, 1.1)
+		var start := xf.origin
+		var rot0 := mi.rotation
+		var tw := mi.create_tween()
+		tw.tween_method(func(t: float) -> void:
+			if is_instance_valid(mi):
+				var p := start + vel * t + Vector3.DOWN * 9.0 * t * t
+				p.y = maxf(p.y, floor_y)
+				mi.global_position = p
+				mi.rotation = rot0 + spin * t, 0.0, life, life)
+		tw.parallel().tween_property(mi, "scale", mi.scale * 0.05, life).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_callback(mi.queue_free)
 
 func _exit_tree() -> void:
 	release_token()
