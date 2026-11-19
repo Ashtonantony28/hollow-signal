@@ -219,7 +219,9 @@ func _on_ammo(mag: int, reserve: int) -> void:
 	ammo_label.add_theme_color_override("font_color", Color(1, 0.4, 0.3) if mag == 0 else Color.WHITE)
 
 func _on_weapon(id: StringName) -> void:
-	weapon_label.text = (WeaponData.get_def(id).name as String).to_upper()
+	var t := Game.tier(id)
+	weapon_label.text = (WeaponData.get_def(id).name as String).to_upper() + ("" if t == 0 else "  [%s]" % WeaponData.TIER_NAMES[t].to_upper())
+	weapon_label.add_theme_color_override("font_color", WeaponData.TIER_COLORS[t])
 
 func _on_band(b: int) -> void:
 	var c: Color = ThemeData.BAND_COLORS[b]

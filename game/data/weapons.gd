@@ -69,3 +69,28 @@ const DEFS := {
 
 static func get_def(id: StringName) -> Dictionary:
 	return DEFS[id]
+
+## Rarity tiers found as Tuning Kits in decks; each upgrades one gun for the rest of the run.
+const TIER_NAMES := ["Standard", "Tuned", "Resonant"]
+const TIER_COLORS := [Color(0.8, 0.8, 0.85), Color(0.35, 0.75, 1.0), Color(1.0, 0.6, 0.15)]
+const TIER_DAMAGE := [1.0, 1.15, 1.3]
+const TIER_MAG := [1.0, 1.25, 1.5]
+const TIER_RATE := [1.0, 1.0, 0.87]     # fire_interval multiplier (lower = faster)
+
+static var _tier_cache := {}
+
+## Weapon definition with a rarity tier applied (cached).
+static func tiered(id: StringName, tier: int) -> Dictionary:
+	if tier <= 0:
+		return DEFS[id]
+	var key := "%s|%d" % [id, tier]
+	if not _tier_cache.has(key):
+		var d: Dictionary = (DEFS[id] as Dictionary).duplicate()
+		d.damage = float(d.damage) * TIER_DAMAGE[tier]
+		if d.has("damage_max"):
+			d.damage_max = float(d.damage_max) * TIER_DAMAGE[tier]
+		d.mag = maxi(1, int(round(int(d.mag) * TIER_MAG[tier])))
+		d.fire_interval = float(d.fire_interval) * TIER_RATE[tier]
+		d.tier = tier
+		_tier_cache[key] = d
+	return _tier_cache[key]

@@ -17,6 +17,7 @@ var charge := 0.0
 var ammo: Dictionary = {}     # weapon id -> {mag, reserve}
 var mods: Dictionary = {}     # mod id -> stacks
 var loadout: Array[StringName] = []  # the 4 weapons carried this run
+var weapon_tier: Dictionary = {}     # weapon id -> rarity tier (0 Standard, 1 Tuned, 2 Resonant)
 
 # run statistics
 var stats := {"kills": 0, "shots": 0, "hits": 0, "damage_dealt": 0.0, "damage_taken": 0.0, "time": 0.0}
@@ -41,6 +42,7 @@ func new_run(seed_value: int = -1) -> void:
 	charge = 0.0
 	mods = {}
 	ammo = {}
+	weapon_tier = {}
 	loadout = Profile.loadout.duplicate()
 	for id in WeaponData.ALL:
 		var d: Dictionary = WeaponData.get_def(id)
@@ -55,6 +57,17 @@ func reserve_max(id: StringName) -> int:
 	if base < 0:
 		return -1
 	return int(base * (1.0 + 0.5 * mod_level(&"deep_pockets")))
+
+func tier(id: StringName) -> int:
+	return int(weapon_tier.get(id, 0))
+
+## Upgrades a weapon by one tier (max Resonant). Returns the new tier, or -1 if already maxed.
+func upgrade_weapon(id: StringName) -> int:
+	var t := tier(id)
+	if t >= WeaponData.TIER_NAMES.size() - 1:
+		return -1
+	weapon_tier[id] = t + 1
+	return t + 1
 
 func mod_level(id: StringName) -> int:
 	return int(mods.get(id, 0))

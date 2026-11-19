@@ -25,6 +25,18 @@
 - FX: CPUParticles3D impact sparks, dust, bullet marks (80-quad ring buffer), casings, muzzle and death smoke.
 - Models: chamfered boxes for all primitive parts, viewmodel key light.
 
+## v0.4 mechanics (2026-11-19)
+
+- Hit reactions: white hit flash, small shove, weak-point damage bursts stagger (not Ticks), deaths break
+  the enemy into tumbling debris.
+- Hazards placed after deck validation (layout unchanged): explosive canister clusters (chain, hurt
+  everyone), steam vents (hiss warning, then scalding column) from deck 2, electrified floors (flicker
+  warning; jumping over is safe) from deck 3.
+- New enemy Lamplighter (deck 2+): long-range sniper; slow-tightening laser, lose line of sight to cancel.
+- Tuning Kits: rarity tiers Standard / Tuned (+15% dmg, +25% mag) / Resonant (+30% dmg, +50% mag, faster);
+  guaranteed in vaults, sometimes in caches and from elites/Bulwarks. Reset each run. HUD shows the tier.
+- 36 headless tests (new: tests/test_mechanics.gd).
+
 ## Known gaps / next
 
 - Owner playtest feedback (feel, difficulty, performance on the target PC).

@@ -46,6 +46,9 @@ func explode(at: Vector3) -> void:
 		if dmg > 0.0:
 			e.take_hit(dmg, band, e.global_position + Vector3.UP * 0.8, (e.global_position - at).normalized())
 			hit_any = true
+	for c in get_tree().get_nodes_in_group("canisters"):
+		if is_instance_valid(c) and c.global_position.distance_to(at) < radius:
+			c.chain()
 	if hit_any:
 		Game.stats.hits += 1
 	if owner_player and is_instance_valid(owner_player):

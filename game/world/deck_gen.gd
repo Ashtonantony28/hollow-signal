@@ -18,6 +18,7 @@ static func generate(seed_value: int, deck_index: int) -> Dictionary:
 		if not layout.is_empty() and validate(layout).is_empty():
 			layout.seed = seed_value
 			layout.attempt = attempt
+			_place_hazards(layout, seed_value * 31 + deck_index * 7 + 11)
 			return layout
 	push_error("DeckGen: failed to generate a valid deck for seed %d" % seed_value)
 	return {}
@@ -248,6 +249,48 @@ static func _try_generate(s: int, deck_index: int) -> Dictionary:
 		"rooms": rooms, "edges": edges, "props": props, "deck": deck_index, "platforms": platforms,
 		"start": start, "lift": lift, "vault": vault, "uplink": uplink, "boss": is_boss,
 	}
+
+## Environmental hazards, placed after validation so they never change the deck's shape.
+## Canisters from deck 1, steam vents from deck 2, shock floors from deck 3. Never in the start
+## room, the boss arena or beside doorways; their cells are removed from enemy spawn cells.
+static func _place_hazards(layout: Dictionary, s: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = s
+	var deck: int = layout.deck
+	var hazards: Array = []
+	var w: int = layout.w
+	var h: int = layout.h
+	for i in layout.rooms.size():
+		var room: Dictionary = layout.rooms[i]
+		if i == layout.start or (layout.boss and room.type == &"arena"):
+			continue
+		var spawns: Array = room.spawns
+		var pool: Array = []
+		for c in spawns:
+			if c == room.center or _near_doorway(layout.cells, layout.room_id, w, h, c.x, c.y, i):
+				continue
+			pool.append(c)
+		if pool.is_empty():
+			continue
+		var want: Array = []
+		match room.type:
+			&"arena", &"uplink":
+				want = [&"canister", &"canister"]
+				if deck >= 1: want.append(&"vent")
+				if deck >= 2: want.append(&"shock")
+			&"hub":
+				if rng.randf() < 0.7: want.append(&"canister")
+				if deck >= 1 and rng.randf() < 0.5: want.append(&"vent")
+				if deck >= 2 and rng.randf() < 0.4: want.append(&"shock")
+			&"cache", &"vault":
+				if rng.randf() < 0.5: want.append(&"canister")
+		for kind in want:
+			if pool.is_empty():
+				break
+			var c: Vector2i = pool.pop_at(rng.randi_range(0, pool.size() - 1))
+			hazards.append({"kind": kind, "cell": c, "room": i})
+			spawns.erase(c)
+	layout.hazards = hazards
 
 static func _carve_corridor(cells: PackedByteArray, ceil_h: PackedFloat32Array, w: int, h: int,
 		a: Vector2i, b: Vector2i, x_first: bool, width: int) -> void:

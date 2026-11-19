@@ -185,7 +185,7 @@ func set_band(b: int, silent: bool = false) -> void:
 	Events.band_changed.emit(band)
 
 func def() -> Dictionary:
-	return WeaponData.get_def(current)
+	return WeaponData.tiered(current, Game.tier(current))
 
 func ammo() -> Dictionary:
 	return Game.ammo[current]
