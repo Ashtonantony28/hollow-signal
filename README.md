@@ -9,6 +9,18 @@ graphics.
 
 - Design: [docs/DESIGN.md](docs/DESIGN.md) · Status: [docs/STATUS.md](docs/STATUS.md)
 
+![Hollow Signal gameplay: the autoplay bot clearing a deck](docs/media/hollow-signal-gameplay.gif)
+
+<sub>Captured headlessly in CI-style conditions (Xvfb + software GL, Godot `--write-movie`), with the built-in
+autoplay bot driving (`--autoplay --god`, seeds 7 and 21). Full 30 s clip: [hollow-signal-gameplay.mp4](docs/media/hollow-signal-gameplay.mp4).</sub>
+
+| | |
+|---|---|
+| ![Deck corridor with the Arc Carbine](docs/media/shot-corridor.jpg) | ![Choir swarm in a red-alert room](docs/media/shot-swarm.jpg) |
+| A generated deck corridor, Arc Carbine | Choir swarm during an uplink hold |
+| ![Shielded enemies glowing in the teal band](docs/media/shot-shield-bands.jpg) | ![Main menu](docs/media/shot-menu.jpg) |
+| Teal-band shields: retune with Q for triple damage | Main menu (seeded runs, difficulty, armory) |
+
 ## Play
 
 Download `HollowSignal-windows` from the latest CI run (Actions tab) and run `HollowSignal.exe`.
@@ -26,6 +38,7 @@ Core mechanic: enemy shields glow amber/teal/violet. Retune (Q) to the same band
 ```bash
 tools/test.sh                 # unit tests, 600-seed deck invariants, bot smoke tests
 tools/check.sh                # parse every script
+tools/capture_media.sh        # regenerate docs/media (gameplay GIF/MP4 + screenshots, needs xvfb + ffmpeg)
 # a bot plays the game (god mode), prints progress
 godot --headless --path . -- --autoplay --god --seed=7 --quit-after=120 --timescale=4
 # screenshots with software GL
